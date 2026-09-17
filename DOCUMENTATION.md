@@ -144,7 +144,7 @@ recon-agent/
 │   ├── validate_fixtures.py        # 20 data/pipeline assertions (no pytest needed)
 │   └── smoke_ui.py                 # 10 headless Streamlit AppTest UI checks
 ├── .streamlit/
-│   └── config.toml                 # Dark audit theme (bg #0b0f17, text #e5e7eb)
+│   └── config.toml                 # War-room theme (ledger navy, brass, serif/plex fonts)
 ├── requirements.txt                # streamlit>=1.44, pandas>=2.0, openpyxl>=3.1
 ├── run.sh                          # Preview launcher: binds 0.0.0.0, honours $PORT
 ├── .gitignore                      # venv, __pycache__, secrets.toml
@@ -329,15 +329,29 @@ doubles as the **behavioural oracle** the live tool must match or beat on these 
 
 ## 7. The Streamlit Dashboard, Section by Section
 
-Dark audit aesthetic (`#0b0f17` background via `.streamlit/config.toml` + injected CSS;
-`#111827` metric cards; red `#f87171` / amber `#fbbf24` / green `#34d399` status accents).
+The visual language is **"the compliance war room"** — built from the subject matter, not
+from a generic dashboard template:
+
+- **Palette** (`.streamlit/config.toml` + injected CSS): ledger navy surfaces (`#131A29` app,
+  `#1B2537` metric panels, `#0F1524` sidebar, `#0E1524` code), paper-toned text `#E8E4D8`,
+  **brass `#C9A227`** as the primary accent (money, not neon), stamp green `#30A46C` for
+  recovered ITC, stamp red `#E5484D` for exposure and `#N/A`.
+- **Type**: Source Serif 4 for headings (the register of official Indian tax documents),
+  IBM Plex Sans for UI copy, IBM Plex Mono for every figure, invoice number and status.
+- **The signature element**: statuses render as **rubber-stamp chips** — double-ring
+  (`border: 3px double`) bordered mono caps with a faint colour wash, the visual grammar of
+  an Indian compliance file: `MATCHED · DETERMINISTIC`, `MATCHED · AI 82%`,
+  `DEFAULTING SUPPLIER`, `PORTAL-ONLY · LATE FILING`.
+- **Amounts read like Indian invoices**: `inr()` groups digits the lakh/crore way
+  (₹1,07,971), not the Western way (₹107,971).
+- Metric panels are square-cornered (2px) and quiet, so the stamps carry the colour.
 
 ### 7.1 Header & quickstart
-- Title: **Recon-Agent | Autonomous GST ITC Reconciliation**
-- Subtitle: **AWS Bedrock & Multi-Agent Architecture for MSME Recovery**
-- One-line problem hook (₹45,000 Cr · Section 16(2)(aa)).
-- **`⚡ Load Demo Fixtures`** button — clears any uploads/state so judges get the canonical
-  demo in one click, no file browsing.
+- Title: **Recon-Agent** (serif), subtitle *Autonomous GST ITC reconciliation for Indian MSMEs*.
+- One-line problem hook: ₹45,000 crore unclaimed; Section 16(2)(aa) blocks credit unless the
+  supplier files.
+- **`Load demo fixtures`** button (brass primary) — clears any uploads/state so judges get
+  the canonical demo in one click, no file browsing.
 
 ### 7.2 KPI cards (top bar)
 | Card | Value | Why it matters |
@@ -348,34 +362,36 @@ Dark audit aesthetic (`#0b0f17` background via `.streamlit/config.toml` + inject
 | ITC at High Risk | ₹20,071 (Rule 88D exposure) | Money to act on *today*. |
 
 ### 7.3 Side-by-side live comparison — the winning moment
-- **Left — “🧮 Standard Excel Reconciliation”:** shows the literal `=VLOOKUP(...)` formula in a
-  code block, a red metric **“Prematurely written off as lost: ₹50,761” (6 invoices `#N/A`)**
-  and each failed row rendered `❌ #N/A books-row ↛ portal-row` in red.
-- **Right — “🤖 Recon-Agent Semantic Pipeline”:** green metric **“ITC rescued by semantic
-  matching: ₹30,690 (3 invoices)”**, each rescue rendered `✅ MATCHED (AI CONFIDENCE: 82%)`,
-  with books-row → portal-row and the evidence line
-  (`Tax corroborated · GSTIN verified · numeral overlap on 'INV-081' · name similarity 55%`).
+- **Left — “The spreadsheet, faithfully reproduced”:** the literal `=VLOOKUP(...)` formula in a
+  code block, a red metric **“Written off as lost: ₹50,761” (6 invoices `#N/A`)**, then each
+  failed row stamped `UNRESOLVED` with its books entry and the portal row it never matched.
+- **Right — “The same rows, reconciled”:** green metric **“Rescued by the semantic pass:
+  ₹30,690 (3 invoices)”**, each rescue stamped `MATCHED · AI 82%` over books-row → portal-row
+  with the evidence line (`Tax corroborated · GSTIN verified · numeral overlap on 'INV-081' ·
+  name similarity 55%`).
+- Rows are separated by faint dashed rules, like a register page.
 - The rows on the right are **literally the rows on the left** — same invoices, opposite fates.
 
 ### 7.4 Supplier Recovery Panel (the 41.2% bucket)
-- Amber metric “ITC trapped with non-filing suppliers: ₹20,071”.
-- Table: Invoice · Supplier · GSTIN · ITC (₹) · Phone (pulled from the register).
+- Red metric “Trapped with non-filing suppliers: ₹20,071”.
+- Table: Invoice · Supplier · GSTIN · ITC (Indian-grouped) · Phone (pulled from the register).
+- Per vendor, a `DEFAULTING SUPPLIER` stamp with name — invoice — amount.
 - Per vendor, **`Dispatch WhatsApp Recovery Notice via A2A Agent`** (disabled with a tooltip
   if no phone on file). Click → logs `[A2A] Delegated to Comms Agent → …` → opens the dialog (§8).
 
 ### 7.5 Reconciliation Ledger
 Full classification table for **every** row: Books Invoice, Portal Invoice, Supplier, GSTIN,
-ITC (₹), Status label, Confidence %, Evidence. This is the audit artifact — every claim on the
+ITC, Status stamp, Confidence %, Evidence. This is the audit artifact — every claim on the
 dashboard is traceable to a row here.
 
 ### 7.6 Agent Activity Log
-Expandable console (`st.code` lines, capped at 150) with timestamped, agent-tagged events:
-`[EXCEL]`, `[AGENT]` (ingest, deterministic pass, Bedrock invocation, semantic recovery),
-`[A2A]` (delegation + dispatch). The “multi-agent” narrative is visible, not claimed.
+Expandable console (one `st.code` block, capped at 150 lines) with timestamped, agent-tagged
+events: `[EXCEL]`, `[AGENT]` (ingest, deterministic pass, Bedrock invocation, semantic
+recovery), `[A2A]` (delegation + dispatch). The “multi-agent” narrative is visible, not claimed.
 
 ### 7.7 Sidebar
 - **Data Source:** two uploaders (`.xlsx` register, `.json` 2B) + `Reconcile uploaded files`
-  (real custom datasets work end-to-end) + `🧹 Reset to demo fixtures`.
+  (real custom datasets work end-to-end) + `Reset to demo fixtures`.
 - **Backend:** `Use AWS Bedrock orchestrator` toggle — the documented switch point, with
   captions naming Strands SDK · MCP · DynamoDB (on) vs local matcher (off).
 - Footer: tax period chip (`fp: 082026`) + hackathon badge.
@@ -394,9 +410,9 @@ Expandable console (`st.code` lines, capped at 150) with timestamped, agent-tagg
      > August 2026. Please file your GSTR-1 before the 11th to prevent credit blockage
      > under Rule 88D.
 
-   - Compliance caption: *Template governed by Rule 88D · 30-day remedy window ·
-     DRC-01C exposure ₹<24% p.a. interest on the invoice's tax>*.
-4. **✅ Confirm dispatch** → `[A2A] WhatsApp notice dispatched …` + toast + dialog closes.
+   - Compliance caption: *Template governed by Rule 88D, 30-day remedy window. DRC-01C
+     exposure ₹<24% p.a. interest on the invoice's tax>*.
+4. **Confirm dispatch** → `[A2A] WhatsApp notice dispatched …` + toast + dialog closes.
    **Cancel** → closes, nothing logged.
 
 In production the Confirm branch is where the A2A call to the Comms Agent (→ Twilio) goes;
@@ -423,7 +439,9 @@ confidences within 0–100; WhatsApp template contains *Rule 88D / GSTR-1 / Augu
 (₹1,07,971 / ₹57,210 / ₹30,690 / ₹20,071); ≥2 dataframes; the three `wa-*` buttons; and after a
 click: no exception, `wa_modal` set in session state, `[A2A]` delegation in the log.
 
-**Current status: 30/30 passing.**
+**Current status: 38/38 passing** (includes regression tests for portal-invoice
+double-claiming with duplicate books lines, fail-closed GSTIN corroboration, and the
+empty-supplier-name guard).
 
 ---
 
@@ -483,10 +501,12 @@ equivalents:
 ```
 
 Invariants the orchestrator must honour (they are what makes the product defensible):
-- **No match without corroboration**: tax within ₹2 **and** GSTIN equality — embeddings may
-  re-*identify* rows, never re-*price* them.
+- **No match without corroboration**: tax within ₹2 **and** GSTIN equality (fail-closed — a
+  books row with a blank GSTIN is never corroborated) — embeddings may re-*identify* rows,
+  never re-*price* them.
 - **Conservation**: every books row appears exactly once (exact/ai/missing); every portal row
-  is claimed by exactly one match or becomes `portal_only`.
+  is claimed by exactly one match or becomes `portal_only`. Duplicate books lines (split
+  billing, double entry) collapse onto one 2B claim; the surplus stays `missing`.
 - `missing` ⇒ books-only; `portal_only` ⇒ portal-only. Never both sides absent.
 
 ### 11.2 Integration points in `app.py` (all in one place)
@@ -519,7 +539,9 @@ live backend when it lands.
    Point right — the *same three typoed invoices* resolved at **82% / 93% / 95%** with the
    evidence line. “Excel sees noise. The agent sees a corroborated invoice.” (90s)
 5. **Recovery panel:** “₹20,071 isn't lost — it's *trapped*, and we know whom to call.”
-   Click dispatch → read the Rule 88D WhatsApp aloud → confirm → toast + log line. (60s)
+   Click dispatch → read the Rule 88D WhatsApp aloud → confirm → toast + log line.
+   *(If asked: the send itself is simulated in this build — the Twilio call is the backend
+   Comms Agent's job, see §11.2.)* (60s)
 6. **Ledger:** “Every classification carries its evidence — audit-ready by construction.” (30s)
 7. **Close:** toggle the Bedrock switch — “same UI, live Bedrock behind it” — and the
    architecture slide: S3 → Lambda → DynamoDB → Strands → Bedrock → A2A → Twilio. (45s)
