@@ -39,6 +39,10 @@ def main() -> int:
         check("rescued KPI shows ₹30,690",
               any("30,690" in m.value for m in at.metric),
               str([m.value for m in at.metric]))
+        check("amounts use Indian digit grouping (₹1,07,971)",
+              any("1,07,971" in m.value for m in at.metric)
+              and not any("107,971" in m.value for m in at.metric),
+              str([m.value for m in at.metric]))
     check("two dataframes rendered", len(at.dataframe) >= 2, f"{len(at.dataframe)} frames")
     check("dispatch buttons present",
           any(b.key and b.key.startswith("wa-") for b in at.button),

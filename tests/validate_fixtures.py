@@ -63,6 +63,138 @@ def main() -> int:
     check("every defaulting supplier has GSTIN 27-prefixed",
           all(m.supplier_gstin.startswith("27") for m in missing))
 
+    print("== Conservation (each portal row claimed at most once) ==")
+    claimed = [m.portal_no for m in matches if m.status in ("exact", "ai")]
+    check("no portal invoice double-claimed", len(set(claimed)) == len(claimed),
+          str(claimed))
+
+    # Two books lines sharing GSTIN + tax (duplicate entry / split billing)
+    # must resolve to a single 2B claim — the loser stays 'missing'.
+    dup = pd.concat([books, books.iloc[[0]]], ignore_index=True)  # Sunrise, 2B: INV/24-25/075
+    dup_matches = app.run_recon_pipeline(dup, portal)
+    dup_claims = [m for m in dup_matches
+                  if m.status in ("exact", "ai") and m.portal_no == "INV/24-25/075"]
+    check("duplicate books line cannot double-claim one 2B entry",
+          len(dup_claims) == 1, f"{len(dup_claims)} claims on INV/24-25/075")
+    dup_remainder = [m for m in dup_matches
+                     if m.register_no == "INV/24-25/075" and m.status == "missing"]
+    check("surplus duplicate line stays missing", len(dup_remainder) == 1,
+          str([m.status for m in dup_remainder]))
+
+    print("== Corroboration fails closed ==")
+    blank = books.copy()
+    blank.loc[6, "supplier_gstin"] = ""  # Acme row, group 2
+    blank_matches = app.run_recon_pipeline(blank, portal)
+    acme_row = next(m for m in blank_matches if "081" in m.register_no)
+    check("books row without GSTIN is never corroborated",
+          acme_row.status == "missing", acme_row.status)
+
+    print("== Bedrock verdict parser ==")
+    ok = app._parse_verdict('{"match": "INV-081", "confidence": 94, "reason": "serial matches"}')
+    check("plain JSON verdict parsed", ok == {"match": "INV-081", "confidence": 94,
+                                              "reason": "serial matches"}, str(ok))
+    fenced = app._parse_verdict('Here you go:\n```json\n{"match": null, "confidence": 10}\n```')
+    check("fenced/prefixed verdict parsed", isinstance(fenced, dict) and fenced["match"] is None)
+    check("garbage verdict → None", app._parse_verdict("no json here at all") is None)
+
+    print("== Bedrock degradation (unreachable → fallback, never crashes) ==")
+    calls = {"n": 0}
+
+    def _boom(*a, **k):
+        calls["n"] += 1
+        raise RuntimeError("network unreachable")
+
+    orig_matcher = app._bedrock_semantic_matcher
+    app._bedrock_semantic_matcher = _boom
+    try:
+        degraded = app.run_recon_pipeline(books, portal, use_bedrock=True)
+    finally:
+        app._bedrock_semantic_matcher = orig_matcher
+    check("matcher consulted exactly once", calls["n"] == 1, f"{calls['n']} calls")
+    check("degraded run == fallback classification",
+          sum(m.status == "ai" for m in degraded) == 3
+          and sum(m.tax for m in degraded if m.status == "ai") == 30_690)
+
+    print("== Pipeline cache (reruns never re-bill Bedrock) ==")
+    app._bedrock_semantic_matcher = _boom
+    try:
+        again = app.run_recon_pipeline(books, portal, use_bedrock=True)
+    finally:
+        app._bedrock_semantic_matcher = orig_matcher
+    check("cache hit skips the matcher", calls["n"] == 1, f"{calls['n']} calls after rerun")
+    check("cached results identical", [m.register_no for m in again]
+          == [m.register_no for m in degraded])
+
+    print("== Bedrock semantic pass (fake Converse client) ==")
+    # Books copy: original Sunrise row loses its GSTIN; the duplicate keeps a
+    # valid one and is a LITERAL match, so Tier 1 claims INV-24-25/075 and the
+    # model only ever sees corroborated, unclaimed candidates.
+    b2 = books.copy()
+    b2.loc[0, "supplier_gstin"] = ""
+    dup2 = pd.concat([b2, books.iloc[[0]]], ignore_index=True)
+
+    def _reply_with(match_fn):
+        class _Stub:
+            def __init__(self):
+                self.calls = 0
+                self.asked: list[str] = []
+
+            def converse(self, **kwargs):
+                self.calls += 1
+                req = json.loads(kwargs["messages"][0]["content"][0]["text"])
+                self.asked.append(req["books_invoice"]["invoice_no"])
+                return {"output": {"message": {"content": [{
+                    "text": json.dumps(match_fn(req))}]}}}
+
+        return _Stub()
+
+    echo = _reply_with(lambda req: {"match": req["portal_candidates"][0]["inum"],
+                                    "confidence": 91,
+                                    "reason": "trailing serial and trade name agree"})
+    orig_client = app._bedrock_client
+    app._bedrock_client = lambda: echo
+    try:
+        bm = app._bedrock_semantic_matcher(dup2, portal)
+    finally:
+        app._bedrock_client = orig_client
+    bm_ai = [m for m in bm if m.status == "ai"]
+    check("consulted only for corroborated candidates (3 rows)", echo.calls == 3,
+          f"{echo.calls} calls: {echo.asked}")
+    check("blank-GSTIN row never sent to the model",
+          not any("075" in n for n in echo.asked), str(echo.asked))
+    check("echo replies → exactly the 3 typo rows rescued", len(bm_ai) == 3,
+          str([(m.register_no, m.portal_no) for m in bm_ai]))
+    if len(bm_ai) == 3:
+        check("each verdict mapped to its own portal row",
+              {m.portal_no for m in bm_ai} == {"INV-081", "TAX-2026-019", "INV-2026-907"},
+              str({m.portal_no for m in bm_ai}))
+        check("confidence parsed and clamped (91)",
+              all(m.ai_conf == 91 for m in bm_ai), str([m.ai_conf for m in bm_ai]))
+        check("blank-GSTIN Sunrise stays missing (fail-closed)",
+              any(m.status == "missing" and "075" in m.register_no for m in bm))
+    check("conservation: INV/24-25/075 claimed exactly once",
+          sum(1 for m in bm if m.status in ("exact", "ai")
+              and m.portal_no == "INV/24-25/075") == 1)
+
+    liar = _reply_with(lambda req: {"match": "INV/24-25/075", "confidence": 99,
+                                    "reason": "model insists"})
+    app._bedrock_client = lambda: liar
+    try:
+        lm = app._bedrock_semantic_matcher(books, portal)
+    finally:
+        app._bedrock_client = orig_client
+    check("model cannot claim an already-matched portal row",
+          not any(m.status == "ai" for m in lm),
+          str([(m.register_no, m.portal_no) for m in lm if m.status == "ai"]))
+    check("conservation holds against a lying model",
+          sum(1 for m in lm if m.status in ("exact", "ai")
+              and m.portal_no == "INV/24-25/075") == 1)
+
+    print("== WhatsApp template guards ==")
+    empty = app.Match("X", "—", "", "27AA", 100.0, "missing")
+    check("wa_preview survives empty supplier name",
+          "Supplier" in app.wa_preview(empty, "August 2026"))
+
     print("== Group 2 identity (tax corroborated, GSTIN verified) ==")
     acme = next(m for m in ai if "081" in m.register_no)
     check("Acme portal invoice is INV-081", acme.portal_no == "INV-081", acme.portal_no)
