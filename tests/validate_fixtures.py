@@ -7,6 +7,7 @@ Run directly (no pytest needed):  python tests/validate_fixtures.py
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -16,6 +17,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "frontend"))
 
 import app  # noqa: E402  (Streamlit module import — no server started)
+
+# Tests must never write to the deployed DynamoDB audit trail.
+os.environ["RECON_RESULTS_TABLE"] = ""
 
 
 def main() -> int:

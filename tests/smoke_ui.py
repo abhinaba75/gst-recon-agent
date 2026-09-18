@@ -6,6 +6,7 @@ Run directly (no pytest needed):  python tests/smoke_ui.py
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -13,6 +14,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "frontend"))
 
 from streamlit.testing.v1 import AppTest  # noqa: E402
+
+# Tests must never write to the deployed DynamoDB audit trail.
+os.environ["RECON_RESULTS_TABLE"] = ""
 
 
 def main() -> int:
