@@ -107,6 +107,11 @@ def main() -> int:
           ca.normalize_phone("919820177890") == "whatsapp:+919820177890")
     check("empty → None", ca.normalize_phone("") is None
           and ca.normalize_phone(None) is None)
+    check("junk digits rejected, not mangled into whatsapp: form",
+          ca.normalize_phone("12345") is None and ca.normalize_phone("999") is None
+          and ca.normalize_phone("call 1800 GET LOST") is None)
+    check("10-digit Indian local gains the 91 prefix",
+          ca.normalize_phone("9820177890") == "whatsapp:+919820177890")
 
     print("== Comms agent: simulated mode (no Twilio keys) ==")
     for k in ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_WHATSAPP_FROM"):

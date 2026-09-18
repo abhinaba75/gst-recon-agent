@@ -24,6 +24,8 @@ if TYPE_CHECKING:  # only for type hints; boto3 is imported lazily
 
 _REGION_KEYS = ("RECON_AWS_REGION", "AWS_REGION", "AWS_DEFAULT_REGION")
 
+_dynamo = None  # reused across calls; one boto3 client per process
+
 
 def table_name() -> str | None:
     """Configured table name, or None when persistence is not configured."""
@@ -32,10 +34,15 @@ def table_name() -> str | None:
 
 
 def _client() -> Any:
-    import boto3
+    """Process-wide DynamoDB client (a fresh client per call wasted pools)."""
+    global _dynamo
+    if _dynamo is None:
+        import boto3
 
-    region = next((os.environ[k] for k in _REGION_KEYS if os.environ.get(k)), "us-east-1")
-    return boto3.client("dynamodb", region_name=region)
+        region = next((os.environ[k] for k in _REGION_KEYS if os.environ.get(k)),
+                      "us-east-1")
+        _dynamo = boto3.client("dynamodb", region_name=region)
+    return _dynamo
 
 
 def _now_iso() -> str:

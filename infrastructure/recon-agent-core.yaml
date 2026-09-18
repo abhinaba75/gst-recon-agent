@@ -16,10 +16,9 @@ Parameters:
     Default: demo
     AllowedValues: [demo, prod]
     Description: Deployment stage used in resource names and tags.
-  BudgetMonthyUsd:
-    Type: Number
-    Default: 5
-    Description: Monthly USD ceiling this demo stack is sized to stay under.
+  # Spend is capped with an AWS Budgets budget on the account (pay-per-request
+  # tables and tiny Converse calls keep this stack in the cents range); a
+  # declared-but-unused template parameter would only pretend to guard it.
 
 Resources:
   ############################################################

@@ -26,13 +26,20 @@ def mode() -> str:
 def normalize_phone(raw: str | None) -> str | None:
     """Vendor register phones → Twilio WhatsApp form (``whatsapp:+9198…``).
 
-    Accepts '+919876543210', '919876543210' or bare digits; None when the
-    register has no usable number.
+    Accepts '+919876543210' and '919876543210' as-is; a bare 10-digit Indian
+    local number is prefixed with 91 (every vendor here is Indian). Anything
+    else — short junk, over-long strings, non-phone garbage — is rejected as
+    None rather than becoming a noisy ``whatsapp:`` audit row Twilio would
+    bounce anyway.
     """
     if not raw:
         return None
     digits = "".join(ch for ch in str(raw) if ch.isdigit())
-    return f"whatsapp:+{digits}" if digits else None
+    if len(digits) == 10:  # Indian local mobile → E.164 with the country code
+        digits = "91" + digits
+    if not 12 <= len(digits) <= 15:
+        return None
+    return f"whatsapp:+{digits}"
 
 
 def send_recovery_notice(

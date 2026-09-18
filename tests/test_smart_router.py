@@ -135,6 +135,27 @@ def main() -> int:
     check("honest MISMATCH ×2 → UNRECONCILED",
           v["status"] == "UNRECONCILED" and v["confidence"] == 0, str(v))
 
+    print("== Verdict parsing is strict (NO MATCH is not a match) ==")
+    # 'NO MATCH' at Nova must NOT read as matched; it escalates to Sonnet.
+    nomatch = _Stub(["NO MATCH", "MATCH"])
+    sr._client = nomatch
+    try:
+        v = sr.dual_engine_reconciliation(**{**PAIR, "portal_inv": "INV/24-25/810"})
+    finally:
+        sr._client = orig_client
+    check("'NO MATCH' rejected, escalation still reaches Sonnet",
+          v["status"] == "MATCHED" and v["engine"] == "Claude Sonnet 4.5"
+          and nomatch.models == [sr.NOVA_MICRO, sr.CLAUDE_SONNET], str(v))
+
+    declined2 = _Stub(["NOT A MATCH", "NO MATCH"])
+    sr._client = declined2
+    try:
+        v = sr.dual_engine_reconciliation(**{**PAIR, "portal_inv": "INV/24-25/810"})
+    finally:
+        sr._client = orig_client
+    check("'NOT A MATCH' / 'NO MATCH' both degrade to UNRECONCILED",
+          v["status"] == "UNRECONCILED" and v["confidence"] == 0, str(v))
+
     print("== Degradation ==")
     calls2 = {"n": 0}
 

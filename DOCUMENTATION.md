@@ -440,9 +440,15 @@ confidences within 0–100; WhatsApp template contains *Rule 88D / GSTR-1 / Augu
 click: no exception, `wa_modal` set in session state, `[A2A]` delegation in the log.
 
 **Current status: 89 checks passing across four suites** — 45 fixture/pipeline assertions,
-12 headless UI checks, 12 tiered-router tests (`tests/test_smart_router.py`), and 20
-backend tests (`tests/test_backend.py`: persistence guards, stubbed DynamoDB, comms-agent
-modes and audit rows). Test runs never write to the deployed table.
+13 tiered-router tests (`tests/test_smart_router.py`), 20 backend tests
+(`tests/test_backend.py`: persistence guards, stubbed DynamoDB, comms-agent modes and audit
+rows), and 11 headless UI checks. Test runs never write to the deployed table.
+
+Hardened after pre-merge review: model verdicts must be a bare `MATCH` ("NO MATCH" and
+"NOT A MATCH" degrade to UNRECONCILED instead of reading as matches); the pipeline cache
+digest covers portal tax/GSTIN/trade-name so a corrected GSTR-2B is never served stale;
+and a Bedrock outage degrades without caching the fallback output, so the next rerun
+retries Bedrock.
 
 ---
 

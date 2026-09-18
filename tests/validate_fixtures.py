@@ -6,6 +6,7 @@ Run directly (no pytest needed):  python tests/validate_fixtures.py
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import sys
@@ -119,15 +120,32 @@ def main() -> int:
           sum(m.status == "ai" for m in degraded) == 3
           and sum(m.tax for m in degraded if m.status == "ai") == 30_690)
 
-    print("== Pipeline cache (reruns never re-bill Bedrock) ==")
+    print("== Degraded runs are never cached (a rerun retries Bedrock) ==")
     app._bedrock_semantic_matcher = _boom
     try:
         again = app.run_recon_pipeline(books, portal, use_bedrock=True)
     finally:
         app._bedrock_semantic_matcher = orig_matcher
-    check("cache hit skips the matcher", calls["n"] == 1, f"{calls['n']} calls after rerun")
-    check("cached results identical", [m.register_no for m in again]
-          == [m.register_no for m in degraded])
+    check("degraded result not cached — matcher consulted again",
+          calls["n"] == 2, f"{calls['n']} calls after rerun")
+    check("retry returns consistent fallback classification",
+          [m.register_no for m in again] == [m.register_no for m in degraded])
+
+    print("== Cache digest is portal-sensitive (corrected 2B is not stale) ==")
+    # Same invoice numbers, corrected amounts: the cached classification must
+    # not survive — tax/risk figures would be wrong until the session died.
+    payload2 = copy.deepcopy(payload)
+    for sup in payload2["b2b"]:
+        for inv in sup["inv"]:
+            if inv["inum"] == "INV-081":
+                for it in inv["items"]:
+                    it["iamt"] += 5000.0
+    corrected = app.run_recon_pipeline(books, app._parse_portal(payload2))
+    acme2 = next(m for m in corrected if "081" in m.register_no)
+    check("corrected GSTR-2B reclassified (Acme no longer corroborates)",
+          acme2.status == "missing", acme2.status)
+    check("original cached classification untouched",
+          next(m for m in matches if "081" in m.register_no).status == "ai")
 
     print("== Bedrock semantic pass (fake Converse client) ==")
     # Books copy: original Sunrise row loses its GSTIN; the duplicate keeps a

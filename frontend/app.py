@@ -12,6 +12,7 @@ import html
 import json
 import os
 import re
+import sys
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime
@@ -19,21 +20,19 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Final
 
+# The backend package lives one level up; make it importable before any
+# third-party or backend import below.
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 import boto3
 import pandas as pd
 import streamlit as st
 
-ROOT = Path(__file__).resolve().parent.parent
 FIXTURE_DIR = ROOT / "fixtures"
 REGISTER_XLSX = FIXTURE_DIR / "sample_purchase_register.xlsx"
 GSTR2B_JSON = FIXTURE_DIR / "sample_gstr2b.json"
-
-# The backend package lives one level up; make it importable when Streamlit
-# runs this file from the project root (or anywhere else).
-import sys  # noqa: E402
-
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
 
 # Legal hooks surfaced in the UI (CGST Act / Rules / GSTN notices).
 SEC_16_2AA: Final = "Section 16(2)(aa) — ITC only if visible in GSTR-2B"
@@ -133,7 +132,10 @@ BEDROCK_MODEL_ID: Final = os.environ.get(
 
 
 def _bedrock_client():
-    region = os.environ.get("RECON_AWS_REGION") or os.environ.get("AWS_REGION") or "ap-south-1"
+    # Model access for this account is deployed in us-east-1; keep every
+    # default aligned on that region so the UI cannot claim a wrong endpoint.
+    region = (os.environ.get("RECON_AWS_REGION")
+              or os.environ.get("AWS_REGION") or "us-east-1")
     return boto3.client("bedrock-runtime", region_name=region)
 
 
@@ -464,7 +466,7 @@ def run_recon_pipeline(
     """
     digest = hashlib.sha256(
         (books.to_csv(index=True)
-         + "\x1e".join(p.inum for p in portal)
+         + "\x1e".join(f"{p.inum}|{p.ctin}|{p.trdnm}|{p.tax}" for p in portal)
          + f"|{use_bedrock}|{BEDROCK_MODEL_ID}").encode()
     ).hexdigest()
     cache = st.session_state.setdefault("recon_cache", {})
@@ -473,6 +475,7 @@ def run_recon_pipeline(
         return cache[digest]
 
     log_run(f"[AGENT] Ingesting {len(books)} books rows vs {len(portal)} GSTR-2B rows")
+    degraded = False
     if use_bedrock:
         log_run(f"[AGENT] Invoking Bedrock Converse · {BEDROCK_MODEL_ID.rsplit('.', 1)[-1]}")
         try:
@@ -481,10 +484,15 @@ def run_recon_pipeline(
             log_run(f"[AGENT] Bedrock unreachable ({type(exc).__name__}) → local fallback")
             st.warning("AWS Bedrock unreachable — continuing on the local semantic matcher.")
             matches = _fallback_semantic_matcher(books, portal)
+            degraded = True
     else:
         matches = _fallback_semantic_matcher(books, portal)
-    _persist_run(books, portal, matches)
-    cache[digest] = matches
+    # A degraded run is NOT the authoritative answer for this dataset — don't
+    # cache it under the Bedrock key, or a corrected rerun would stick to the
+    # fallback result until the session dies.
+    if not degraded:
+        _persist_run(books, portal, matches)
+        cache[digest] = matches
     return matches
 
 
@@ -775,7 +783,7 @@ def sidebar() -> None:
                                      "unreachable.")
         if use_bedrock:
             region = (os.environ.get("RECON_AWS_REGION") or os.environ.get("AWS_REGION")
-                      or "ap-south-1")
+                      or "us-east-1")
             model = BEDROCK_MODEL_ID.rsplit(".", 1)[-1]
             creds = ("credentials detected" if os.environ.get("AWS_ACCESS_KEY_ID")
                      else "no AWS credentials — will fall back")

@@ -83,13 +83,24 @@ def call_bedrock_converse(model_id: str, prompt: str) -> str:
 
 def _model_verdict(model_id: str, model_name: str, prompt: str,
                    confidence: int) -> Verdict:
-    """Ask one model; translate the binary reply into a Verdict."""
+    """Ask one model; translate the reply into a Verdict.
+
+    Only a bare ``MATCH`` counts as matched — ``NO MATCH``, ``NOT A MATCH``,
+    ``MISMATCH`` or any verbose reply degrades to UNRECONCILED. A substring
+    check would read "NO MATCH" as a match and defeat the corroboration
+    gate's whole purpose in the production seam.
+
+    Cascade contract on failure: a model ERROR stops the cascade (infrastructure
+    fault, not a verdict; escalating would double spend and latency on an
+    outage path and hammer the premium tier during throttling). The caller
+    surfaces ERROR; a rerun retries it.
+    """
     try:
         reply = call_bedrock_converse(model_id, prompt)
     except Exception as exc:  # noqa: BLE001 — degradation, never a fake MATCH
         return Verdict(status="ERROR", confidence=0, engine=model_name,
                        detail=f"{type(exc).__name__}: {exc}")
-    matched = "MATCH" in reply and "MISMATCH" not in reply
+    matched = re.fullmatch(r"MATCH", reply) is not None
     return Verdict(
         status="MATCHED" if matched else "UNRECONCILED",
         confidence=confidence if matched else 0,
