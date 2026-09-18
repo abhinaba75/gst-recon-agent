@@ -28,6 +28,13 @@ FIXTURE_DIR = ROOT / "fixtures"
 REGISTER_XLSX = FIXTURE_DIR / "sample_purchase_register.xlsx"
 GSTR2B_JSON = FIXTURE_DIR / "sample_gstr2b.json"
 
+# The backend package lives one level up; make it importable when Streamlit
+# runs this file from the project root (or anywhere else).
+import sys  # noqa: E402
+
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 # Legal hooks surfaced in the UI (CGST Act / Rules / GSTN notices).
 SEC_16_2AA: Final = "Section 16(2)(aa) — ITC only if visible in GSTR-2B"
 RULE_88D: Final = "Rule 88D / DRC-01C — auto discrepancy intimation"
@@ -121,7 +128,7 @@ def _similarity(a: str, b: str) -> float:
 
 
 BEDROCK_MODEL_ID: Final = os.environ.get(
-    "RECON_BEDROCK_MODEL_ID", "anthropic.claude-3-5-haiku-20241022-v1:0"
+    "RECON_BEDROCK_MODEL_ID", "anthropic.claude-haiku-4-5-20251001-v1:0"
 )
 
 
@@ -425,6 +432,27 @@ def run_excel_vlookup(books: pd.DataFrame, portal: list[PortalRow]) -> list[Matc
     return out
 
 
+def _persist_run(books: pd.DataFrame, portal: list[PortalRow],
+                 matches: list[Match]) -> None:
+    """Store a cache-miss run in DynamoDB; narration only, never fatal."""
+    try:
+        from backend.db import results as db
+        run_id = db.persist_run(
+            DEMO_PERIOD, len(books), len(portal), matches,
+            {"total": float(books["total_tax"].sum()),
+             "exact": sum(m.tax for m in matches if m.status == "exact"),
+             "ai": sum(m.tax for m in matches if m.status == "ai"),
+             "risk": sum(m.tax for m in matches if m.status == "missing")},
+        )
+    except Exception as exc:  # noqa: BLE001 — persistence must not break the demo
+        log_run(f"[DB] Persistence unavailable ({type(exc).__name__}) — run not stored")
+        return
+    if run_id:
+        log_run(f"[DB] Run {run_id} persisted to DynamoDB audit trail")
+    else:
+        log_run("[DB] Persistence not configured or unreachable — run not stored")
+
+
 def run_recon_pipeline(
     books: pd.DataFrame, portal: list[PortalRow], use_bedrock: bool = False
 ) -> list[Match]:
@@ -432,6 +460,7 @@ def run_recon_pipeline(
 
     Results are cached per dataset+engine in session state, so Streamlit
     reruns (any widget interaction) never re-invoke Bedrock or re-bill it.
+    Fresh runs (cache misses) are persisted to the DynamoDB audit trail once.
     """
     digest = hashlib.sha256(
         (books.to_csv(index=True)
@@ -454,6 +483,7 @@ def run_recon_pipeline(
             matches = _fallback_semantic_matcher(books, portal)
     else:
         matches = _fallback_semantic_matcher(books, portal)
+    _persist_run(books, portal, matches)
     cache[digest] = matches
     return matches
 
@@ -619,6 +649,9 @@ def render_wa_modal(matches: list[Match], period: str) -> None:
     m = st.session_state.get("wa_modal")
     if not m:
         return
+    from backend.subagents import comms_agent
+
+    live = comms_agent.mode() == "twilio"
     st.markdown(f"**To** {m.supplier_name}, `{wa_number(m)}`")
     st.markdown(f"**Period** {period}")
     st.text_area("Message preview", wa_preview(m, period), height=140, key="wa-preview")
@@ -626,10 +659,29 @@ def render_wa_modal(matches: list[Match], period: str) -> None:
         f"Template governed by Rule 88D, 30-day remedy window. "
         f"DRC-01C exposure {inr(m.tax * 0.24)} (interest @24% p.a.)"
     )
+    st.caption(
+        "Send mode: **Twilio WhatsApp API (live)**" if live else
+        "Send mode: **simulated** — Twilio keys not configured; the attempt is "
+        "still recorded in the DynamoDB audit trail."
+    )
     c1, c2 = st.columns(2)
     if c1.button("Confirm dispatch", type="primary", width="stretch"):
-        log(f"[A2A] WhatsApp notice dispatched to {m.supplier_name} ({wa_number(m)})")
-        st.toast("Recovery notice dispatched via A2A Comms Agent")
+        result = comms_agent.send_recovery_notice(
+            period=period, invoice_no=m.register_no, supplier=m.supplier_name,
+            phone=wa_number(m), message=wa_preview(m, period),
+        )
+        if result["ok"]:
+            if result["mode"] == "twilio":
+                log(f"[A2A] WhatsApp delivered to {m.supplier_name} "
+                    f"({wa_number(m)}) · sid {result['message_id']}")
+                st.toast("Recovery notice delivered via Twilio WhatsApp API")
+            else:
+                log(f"[A2A] WhatsApp notice dispatched to {m.supplier_name} "
+                    f"({wa_number(m)}) · simulated, recorded in audit trail")
+                st.toast("Recovery notice recorded (simulated send)")
+        else:
+            log(f"[A2A] Dispatch failed for {m.register_no}: {result['detail']}")
+            st.error(f"Dispatch failed: {result['detail']}")
         _close_wa_modal()
     if c2.button("Cancel", width="stretch"):
         _close_wa_modal()
@@ -731,6 +783,15 @@ def sidebar() -> None:
         else:
             st.caption("Local semantic matcher, zero cloud dependency")
         st.session_state["use_bedrock"] = use_bedrock
+        st.divider()
+        st.markdown("#### Persistence")
+        try:
+            from backend.db import results as db
+            table = db.table_name()
+        except Exception:  # noqa: BLE001
+            table = None
+        st.caption(f"Audit DB: `{table or 'not configured'}`")
+        st.caption("Every reconciliation run and dispatch attempt is recorded")
         st.divider()
         st.caption(f"Period fp: `{st.session_state.get('fp', '082026')}`")
         st.caption("AWS First Commit Hackathon, WeMakeDevs")
