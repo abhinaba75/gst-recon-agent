@@ -1,0 +1,146 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Recon-Agent core infrastructure (WeMakeDevs AWS First Commit).
+  DynamoDB table for reconciliation results and the A2A audit trail,
+  an S3 bucket for uploaded purchase registers / GSTR-2B extracts, and
+  a least-privilege execution role for the application runtime.
+  All resources are tagged for the hackathon project.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: recon-agent
+    Description: Resource name prefix and tag value.
+  Stage:
+    Type: String
+    Default: demo
+    AllowedValues: [demo, prod]
+    Description: Deployment stage used in resource names and tags.
+  # Spend is capped with an AWS Budgets budget on the account (pay-per-request
+  # tables and tiny Converse calls keep this stack in the cents range); a
+  # declared-but-unused template parameter would only pretend to guard it.
+
+Resources:
+  ############################################################
+  # DynamoDB — reconciliation results + A2A WhatsApp audit trail
+  ############################################################
+  ResultsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${ProjectName}-results-${Stage}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      SSESpecification:
+        SSEEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: project
+          Value: !Ref ProjectName
+        - Key: stage
+          Value: !Ref Stage
+
+  ############################################################
+  # S3 — uploaded registers and GSTR-2B extracts (private)
+  ############################################################
+  UploadsBucket:
+    Type: AWS::S3::Bucket
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Sub "${ProjectName}-uploads-${Stage}-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: project
+          Value: !Ref ProjectName
+        - Key: stage
+          Value: !Ref Stage
+
+  ############################################################
+  # IAM — least-privilege runtime role for the application
+  ############################################################
+  AppRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-app-role-${Stage}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      MaxSessionDuration: 3600
+      Policies:
+        - PolicyName: dynamodb-results
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt ResultsTable.Arn
+        - PolicyName: s3-uploads
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: !Sub "${UploadsBucket.Arn}/*"
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt UploadsBucket.Arn
+        - PolicyName: bedrock-invoke
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                  - bedrock:Converse
+                  - bedrock:ConverseStream
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/amazon.nova-micro-v1:0"
+                  - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/anthropic.claude-sonnet-4-5-20250929-v1:0"
+                  - !Sub "arn:${AWS::Partition}:bedrock:*::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0"
+      Tags:
+        - Key: project
+          Value: !Ref ProjectName
+        - Key: stage
+          Value: !Ref Stage
+
+Outputs:
+  ResultsTableName:
+    Description: DynamoDB table for reconciliation results + audit trail
+    Value: !Ref ResultsTable
+  UploadsBucketName:
+    Description: S3 bucket for uploaded registers / 2B extracts
+    Value: !Ref UploadsBucket
+  AppRoleArn:
+    Description: Least-privilege role the application runtime should assume
+    Value: !GetAtt AppRole.Arn

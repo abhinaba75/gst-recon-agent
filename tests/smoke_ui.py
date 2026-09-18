@@ -6,6 +6,7 @@ Run directly (no pytest needed):  python tests/smoke_ui.py
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -13,6 +14,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "frontend"))
 
 from streamlit.testing.v1 import AppTest  # noqa: E402
+
+# Tests must never write to the deployed DynamoDB audit trail.
+os.environ["RECON_RESULTS_TABLE"] = ""
 
 
 def main() -> int:
@@ -38,6 +42,10 @@ def main() -> int:
                          "Rescued ITC (AI)", "ITC at High Risk"], str(labels))
         check("rescued KPI shows ₹30,690",
               any("30,690" in m.value for m in at.metric),
+              str([m.value for m in at.metric]))
+        check("amounts use Indian digit grouping (₹1,07,971)",
+              any("1,07,971" in m.value for m in at.metric)
+              and not any("107,971" in m.value for m in at.metric),
               str([m.value for m in at.metric]))
     check("two dataframes rendered", len(at.dataframe) >= 2, f"{len(at.dataframe)} frames")
     check("dispatch buttons present",
