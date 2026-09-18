@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.streamlit/secrets.toml
+.DS_Store
+tempkeys.txt
+.env
+.env.*
+!.env.example
+# Never commit credential files or crash dumps.
+recon-key*
+*-key*.json
+*-key*.csv
+*.pem
+core
+core.*

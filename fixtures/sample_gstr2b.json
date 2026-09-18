@@ -1,0 +1,259 @@
+{
+  "gstin": "29AAACD5678M1Z2",
+  "fp": "082026",
+  "b2b": [
+    {
+      "ctin": "27AAECS4821K1ZP",
+      "trdnm": "Sunrise Polymers Pvt Ltd",
+      "inv": [
+        {
+          "inum": "INV/24-25/075",
+          "idt": "02-08-2026",
+          "val": 99710.0,
+          "pos": "29",
+          "itcavl": "Y",
+          "items": [
+            {
+              "num": 1,
+              "txval": 84500.0,
+              "rt": 18.0,
+              "iamt": 15210.0,
+              "camt": 0.0,
+              "samt": 0.0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ctin": "29AAFCB9032L1ZQ",
+      "trdnm": "Bharat Office Supplies",
+      "inv": [
+        {
+          "inum": "TAX/2026/014",
+          "idt": "04-08-2026",
+          "val": 37760.0,
+          "pos": "29",
+          "itcavl": "Y",
+          "items": [
+            {
+              "num": 1,
+              "txval": 32000.0,
+              "rt": 18.0,
+              "iamt": 0.0,
+              "camt": 2880.0,
+              "samt": 2880.0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ctin": "36AAGCD1156N1ZS",
+      "trdnm": "Deccan Chemicals LLP",
+      "inv": [
+        {
+          "inum": "INV/24-25/078",
+          "idt": "06-08-2026",
+          "val": 72216.0,
+          "pos": "29",
+          "itcavl": "Y",
+          "items": [
+            {
+              "num": 1,
+              "txval": 61200.0,
+              "rt": 18.0,
+              "iamt": 11016.0,
+              "camt": 0.0,
+              "samt": 0.0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ctin": "29AAHCK2278P1ZT",
+      "trdnm": "Kaveri Packaging",
+      "inv": [
+        {
+          "inum": "BILL-902",
+          "idt": "08-08-2026",
+          "val": 28448.0,
+          "pos": "29",
+          "itcavl": "Y",
+          "items": [
+            {
+              "num": 1,
+              "txval": 25400.0,
+              "rt": 12.0,
+              "iamt": 0.0,
+              "camt": 1524.0,
+              "samt": 1524.0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ctin": "29AAJCT5534Q1ZU",
+      "trdnm": "Trident Facility Services",
+      "inv": [
+        {
+          "inum": "INV/24-25/083",
+          "idt": "11-08-2026",
+          "val": 57702.0,
+          "pos": "29",
+          "itcavl": "Y",
+          "items": [
+            {
+              "num": 1,
+              "txval": 48900.0,
+              "rt": 18.0,
+              "iamt": 0.0,
+              "camt": 4401.0,
+              "samt": 4401.0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ctin": "27AAKCO6645R1ZV",
+      "trdnm": "Orion Electronics",
+      "inv": [
+        {
+          "inum": "INV/24-25/085",
+          "idt": "13-08-2026",
+          "val": 87674.0,
+          "pos": "29",
+          "itcavl": "Y",
+          "items": [
+            {
+              "num": 1,
+              "txval": 74300.0,
+              "rt": 18.0,
+              "iamt": 13374.0,
+              "camt": 0.0,
+              "samt": 0.0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ctin": "27AABCA1234F1Z5",
+      "trdnm": "Acme Corp",
+      "inv": [
+        {
+          "inum": "INV-081",
+          "idt": "15-08-2026",
+          "val": 118000.0,
+          "pos": "29",
+          "itcavl": "Y",
+          "items": [
+            {
+              "num": 1,
+              "txval": 100000.0,
+              "rt": 18.0,
+              "iamt": 18000.0,
+              "camt": 0.0,
+              "samt": 0.0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ctin": "29AABCL5678G1Z3",
+      "trdnm": "Zenith Logistics",
+      "inv": [
+        {
+          "inum": "TAX-2026-019",
+          "idt": "18-08-2026",
+          "val": 47250.0,
+          "pos": "29",
+          "itcavl": "Y",
+          "items": [
+            {
+              "num": 1,
+              "txval": 45000.0,
+              "rt": 5.0,
+              "iamt": 0.0,
+              "camt": 1125.0,
+              "samt": 1125.0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ctin": "27AACCN9901H1Z9",
+      "trdnm": "Nimbus Cloud Services Pvt. Ltd.",
+      "inv": [
+        {
+          "inum": "INV-2026-907",
+          "idt": "20-08-2026",
+          "val": 68440.0,
+          "pos": "29",
+          "itcavl": "Y",
+          "items": [
+            {
+              "num": 1,
+              "txval": 58000.0,
+              "rt": 18.0,
+              "iamt": 10440.0,
+              "camt": 0.0,
+              "samt": 0.0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ctin": "27AAECP4412M1ZR",
+      "trdnm": "Pinnacle Marketing",
+      "inv": [
+        {
+          "inum": "INV-0056",
+          "idt": "12-07-2026",
+          "val": 66720.0,
+          "pos": "29",
+          "itcavl": "Y",
+          "items": [
+            {
+              "num": 1,
+              "txval": 56000.0,
+              "rt": 18.0,
+              "iamt": 0.0,
+              "camt": 5040.0,
+              "samt": 5040.0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "ctin": "27AAFCQ8823N1ZT",
+      "trdnm": "Quantum Print Solutions",
+      "inv": [
+        {
+          "inum": "QP/2026/031",
+          "idt": "28-07-2026",
+          "val": 94380.0,
+          "pos": "29",
+          "itcavl": "Y",
+          "items": [
+            {
+              "num": 1,
+              "txval": 80000.0,
+              "rt": 18.0,
+              "iamt": 14400.0,
+              "camt": 0.0,
+              "samt": 0.0
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
