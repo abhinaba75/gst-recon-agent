@@ -60,12 +60,17 @@ def persist_run(
     portal_count: int,
     matches: list[Any],
     totals: dict[str, float],
+    degraded: bool = False,
 ) -> str | None:
     """Store one reconciliation run with its full classification ledger.
 
     ``matches`` items need register_no / portal_no / supplier_name /
     supplier_gstin / tax / status / ai_conf / reason attributes (the app's
-    Match dataclass qualifies). Returns the run id, or None on any failure.
+    Match dataclass qualifies). ``degraded`` marks a run produced by the local
+    fallback because Bedrock was unreachable: the row is still an audit fact
+    (a reconciliation happened during an outage), but downstream analytics
+    must exclude flagged rows from KPI comparisons. Returns the run id, or
+    None on any failure.
     """
     name = table_name()
     if not name:
@@ -82,6 +87,7 @@ def persist_run(
         "reconciled_itc": {"N": f"{totals.get('exact', 0):.2f}"},
         "rescued_itc": {"N": f"{totals.get('ai', 0):.2f}"},
         "risk_itc": {"N": f"{totals.get('risk', 0):.2f}"},
+        "degraded": {"BOOL": bool(degraded)},
         "results": {"S": json.dumps([
             {
                 "register_no": m.register_no,
@@ -158,6 +164,7 @@ def recent_runs(period: str, limit: int = 5) -> list[dict[str, str]]:
             "rescued": i.get("rescued_itc", {}).get("N", "0"),
             "risk": i.get("risk_itc", {}).get("N", "0"),
             "at": i.get("sk", {}).get("S", "").split("#")[0],
+            "degraded": i.get("degraded", {}).get("BOOL", False),
         }
         for i in resp.get("Items", [])
     ]

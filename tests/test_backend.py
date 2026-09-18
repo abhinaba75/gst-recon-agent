@@ -93,6 +93,14 @@ def main() -> int:
         check("recent_runs queries newest-first shape", runs and runs[0]["run_id"] == run_id,
               str(runs))
 
+        db.persist_run("August 2026", 2, 2, matches,
+                       {"total": 33_210.0}, degraded=True)
+        healthy_item, degraded_item = captured["items"][-2], captured["items"][-1]
+        check("healthy run stored degraded=False", healthy_item["degraded"]["BOOL"] is False)
+        check("degraded run stored degraded=True", degraded_item["degraded"]["BOOL"] is True)
+        check("recent_runs surfaces the degraded flag",
+              db.recent_runs("August 2026")[0]["degraded"] is True)
+
         ok = db.record_dispatch("August 2026", "INV/24-25/088", "Vertex Industrial",
                                 "+919820177890", "simulated", "Dear Vertex…")
         check("record_dispatch writes an audit row", ok and captured["items"][-1]["pk"]["S"]
@@ -112,6 +120,10 @@ def main() -> int:
           and ca.normalize_phone("call 1800 GET LOST") is None)
     check("10-digit Indian local gains the 91 prefix",
           ca.normalize_phone("9820177890") == "whatsapp:+919820177890")
+    check("trunk-prefixed '091 …' form → E.164 without the leading zero",
+          ca.normalize_phone("091 9820177890") == "whatsapp:+919820177890")
+    check("numbers that would start with 0 are rejected (E.164 never does)",
+          ca.normalize_phone("09820177890") is None)
 
     print("== Comms agent: simulated mode (no Twilio keys) ==")
     for k in ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_WHATSAPP_FROM"):
@@ -135,6 +147,13 @@ def main() -> int:
                                     supplier="Vendor", phone=None, message="Hello")
         check("missing phone → ok=False with reason",
               r["ok"] is False and "phone" in r["detail"], str(r))
+        r = ca.send_recovery_notice(period="August 2026", invoice_no="X-4",
+                                    supplier="Vendor", phone="12345", message="Hello")
+        check("junk phone rejected in simulated mode too (mode parity)",
+              r["ok"] is False and "E.164" in r["detail"], str(r))
+        check("junk-phone attempt audited as an error row, not a success",
+              dispatches and dispatches[-1][1].get("error"),
+              str(dispatches[-1][1] if dispatches else None))
     finally:
         ca.db.record_dispatch = orig_record
 

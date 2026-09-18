@@ -148,12 +148,15 @@ def _parse_verdict(text: str) -> dict | None:
 
 
 def _corroborate(books: pd.DataFrame, b: int, p: PortalRow) -> bool:
-    """Tax within ₹2 AND GSTIN equality. Fail-closed, enforced in Python —
-    the model can re-identify rows but never re-price or re-attribute them."""
+    """Tax within ₹2 AND a non-empty GSTIN matching the 2B ctin. Fail-closed
+    like the backend router: two blank strings are not an identity match, so a
+    books row without a GSTIN is never corroborated — enforced in Python, the
+    model can re-identify rows but never re-price or re-attribute them."""
     bt = round(float(books.at[b, "total_tax"]), 2)
     if abs(bt - p.tax) > 2.0:
         return False
-    return _canonical(str(books.at[b, "supplier_gstin"])) == _canonical(p.ctin)
+    books_gstin = _canonical(str(books.at[b, "supplier_gstin"]))
+    return bool(books_gstin) and books_gstin == _canonical(p.ctin)
 
 
 def _build_match(books: pd.DataFrame, b: int, p: PortalRow,
@@ -435,8 +438,14 @@ def run_excel_vlookup(books: pd.DataFrame, portal: list[PortalRow]) -> list[Matc
 
 
 def _persist_run(books: pd.DataFrame, portal: list[PortalRow],
-                 matches: list[Match]) -> None:
-    """Store a cache-miss run in DynamoDB; narration only, never fatal."""
+                 matches: list[Match], degraded: bool = False) -> None:
+    """Store a cache-miss run in DynamoDB; narration only, never fatal.
+
+    Degraded runs (Bedrock unreachable → local fallback) are stored too, but
+    flagged: an outage is an audit fact, while the rows inside are not the
+    authoritative answer for the dataset. Downstream analytics can filter on
+    the flag; the demo KPIs never silently mix fallback output with live runs.
+    """
     try:
         from backend.db import results as db
         run_id = db.persist_run(
@@ -445,6 +454,7 @@ def _persist_run(books: pd.DataFrame, portal: list[PortalRow],
              "exact": sum(m.tax for m in matches if m.status == "exact"),
              "ai": sum(m.tax for m in matches if m.status == "ai"),
              "risk": sum(m.tax for m in matches if m.status == "missing")},
+            degraded=degraded,
         )
     except Exception as exc:  # noqa: BLE001 — persistence must not break the demo
         log_run(f"[DB] Persistence unavailable ({type(exc).__name__}) — run not stored")
@@ -487,12 +497,14 @@ def run_recon_pipeline(
             degraded = True
     else:
         matches = _fallback_semantic_matcher(books, portal)
-    # A degraded run is NOT the authoritative answer for this dataset — don't
-    # cache it under the Bedrock key, or a corrected rerun would stick to the
-    # fallback result until the session dies.
+    # Degradation contract: the fallback output is never cached under the
+    # Bedrock key (a rerun retries Bedrock), but it IS persisted — flagged —
+    # so a Bedrock outage still leaves a DynamoDB audit row.
+    _persist_run(books, portal, matches, degraded=degraded)
     if not degraded:
-        _persist_run(books, portal, matches)
         cache[digest] = matches
+    else:
+        log_run("[AGENT] Degraded run not cached — rerun retries Bedrock")
     return matches
 
 
@@ -800,6 +812,14 @@ def sidebar() -> None:
             table = None
         st.caption(f"Audit DB: `{table or 'not configured'}`")
         st.caption("Every reconciliation run and dispatch attempt is recorded")
+        if table:
+            try:
+                runs = db.recent_runs(DEMO_PERIOD, limit=3)
+            except Exception:  # noqa: BLE001
+                runs = []
+            for r in runs:
+                mark = " · degraded" if r.get("degraded") else ""
+                st.caption(f"`{r['run_id']}` rescued {inr(float(r['rescued']))}{mark}")
         st.divider()
         st.caption(f"Period fp: `{st.session_state.get('fp', '082026')}`")
         st.caption("AWS First Commit Hackathon, WeMakeDevs")
