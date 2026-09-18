@@ -18,7 +18,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+import json  # noqa: E402
+from datetime import datetime  # noqa: E402
+
 from backend.db import results as db  # noqa: E402
+from backend.db import uploads as up  # noqa: E402
+from backend.parser import gstr2b  # noqa: E402
 from backend.subagents import comms_agent as ca  # noqa: E402
 
 
@@ -192,6 +197,89 @@ def main() -> int:
         ca.db.record_dispatch = orig_record
         for k in ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_WHATSAPP_FROM"):
             os.environ.pop(k, None)
+
+    print("== GSTR-2B parser: real GSTN download schema ==")
+    fixture = json.loads((ROOT / "fixtures" / "sample_gstr2b.json").read_text())
+    frows = gstr2b.parse_gstr2b(fixture)
+    check("fixture payload parses to 11 invoices", len(frows) == 11, str(len(frows)))
+    check("fixture numerics preserved through the parser",
+          frows[0]["inum"] == "INV/24-25/075" and frows[0]["igst"] == 15_210.0)
+
+    # Versioned envelope (b2b_5 with period groups) + string numerics + blanks.
+    envelope = {"gstin": "29AAACD5678M1Z2", "fp": "082026",
+                "b2b_5": [{"oppattr": "082026",
+                           "b2b": [{"ctin": "27AABCA1234F1Z5", "trdnm": "Acme Corp",
+                                    "inv": [{"inum": "INV-081", "idt": "15-08-2026",
+                                             "itcavl": "Y",
+                                             "items": [{"txval": "100000.00", "rt": "18",
+                                                        "iamt": "18,000", "camt": "",
+                                                        "samt": None}]}]}]}]}
+    erows = gstr2b.parse_gstr2b(envelope)
+    check("versioned b2b_5 envelope unwrapped to supplier tables",
+          len(erows) == 1 and erows[0]["ctin"] == "27AABCA1234F1Z5")
+    check("string numerics coerced (including thousands separators)",
+          erows[0]["txval"] == 100_000.0 and erows[0]["igst"] == 18_000.0)
+    check("absent invoice val rebuilt from components",
+          erows[0]["val"] == 118_000.0, str(erows[0]["val"]))
+
+    junk = gstr2b.parse_gstr2b({"b2b": [{"ctin": None, "trdnm": 5,
+                                         "inv": [{"inum": None, "val": "junk",
+                                                  "items": [{"txval": "NaN",
+                                                             "iamt": "x"}]}]}]})
+    check("junk payload degrades to zeros, never raises",
+          junk[0]["txval"] == 0.0 and junk[0]["val"] == 0.0 and junk[0]["inum"] == "",
+          str(junk[0]))
+    check("empty payload → empty invoice list", gstr2b.parse_gstr2b({}) == [])
+
+    print("== S3 uploads archive: content-addressed, graceful, least-privilege ==")
+    saved_bucket = os.environ.pop("RECON_UPLOADS_BUCKET", None)
+    try:
+        check("archive_upload → None without a bucket",
+              up.archive_upload(b"x", "f.csv") is None)
+        check("list_archive → [] without a bucket", up.list_archive() == [])
+
+        puts: list[dict] = []
+
+        class _StubS3:
+            def put_object(self, **kwargs):
+                puts.append(kwargs)
+                return {}
+
+            def list_objects_v2(self, **kwargs):
+                return {"Contents": [
+                    {"Key": puts[0]["Key"],
+                     "LastModified": datetime(2026, 9, 18, 12, 0),
+                     "Size": len(puts[0]["Body"])},
+                    {"Key": "uploads/2026-08/fake/"},  # folder marker, filtered
+                ]}
+
+        orig_s3 = up._client
+        up._client = lambda: _StubS3()
+        os.environ["RECON_UPLOADS_BUCKET"] = "recon-agent-uploads-demo-204284492326"
+        try:
+            key1 = up.archive_upload(b"2b-bytes", "gstr2b.json", period="August 2026")
+            check("archive_upload stores AES256-encrypted in the configured bucket",
+                  bool(key1) and puts[0]["Bucket"] == "recon-agent-uploads-demo-204284492326"
+                  and puts[0]["ServerSideEncryption"] == "AES256", str(key1))
+            check("key is content-addressed under the period prefix",
+                  key1.startswith("uploads/August-2026/") and key1.endswith("/gstr2b.json"))
+            key2 = up.archive_upload(b"2b-bytes", "gstr2b.json", period="August 2026")
+            check("identical re-upload lands on the same object (idempotent)",
+                  key1 == key2 and len(puts) == 2)
+            key3 = up.archive_upload(b"corrected", "gstr2b.json", period="August 2026")
+            check("corrected file gets a new archive key (original preserved)",
+                  key3 != key1)
+            listed = up.list_archive()
+            check("list_archive returns objects, filters folder markers",
+                  len(listed) == 1 and listed[0]["bytes"] == str(len(b"2b-bytes"))
+                  and listed[0]["at"] == "2026-09-18 12:00", str(listed))
+        finally:
+            up._client = orig_s3
+    finally:
+        if saved_bucket:
+            os.environ["RECON_UPLOADS_BUCKET"] = saved_bucket
+        else:
+            os.environ.pop("RECON_UPLOADS_BUCKET", None)
 
     print()
     if failures:

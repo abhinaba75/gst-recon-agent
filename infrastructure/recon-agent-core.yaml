@@ -134,6 +134,107 @@ Resources:
         - Key: stage
           Value: !Ref Stage
 
+  ############################################################
+  # Observability — spend guard + table alarms (demo-scale)
+  ############################################################
+  AlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${ProjectName}-alerts-${Stage}"
+      Tags:
+        - Key: project
+          Value: !Ref ProjectName
+        - Key: stage
+          Value: !Ref Stage
+
+  AlertsTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref AlertsTopic
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudWatchAlarms
+            Effect: Allow
+            Principal:
+              Service: cloudwatch.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref AlertsTopic
+            Condition:
+              StringEquals:
+                AWS:SourceAccount: !Ref "AWS::AccountId"
+          - Sid: AllowBudgetsPublish
+            Effect: Allow
+            Principal:
+              Service: budgets.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref AlertsTopic
+            Condition:
+              StringEquals:
+                AWS:SourceAccount: !Ref "AWS::AccountId"
+
+  # Spend guard — a first-class budget (no legacy billing-metric dependency)
+  # that notifies the alerts topic at 80% and 100% of the demo cap.
+  DemoSpendBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: !Sub "${ProjectName}-demo-spend-${Stage}"
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: 5
+          Unit: USD
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+          Subscribers:
+            - SubscriptionType: SNS
+              Address: !Ref AlertsTopic
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 100
+          Subscribers:
+            - SubscriptionType: SNS
+              Address: !Ref AlertsTopic
+  TableThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${ProjectName}-dynamodb-throttles-${Stage}"
+      AlarmDescription: Reconciliation table requests are being throttled.
+      Namespace: AWS/DynamoDB
+      MetricName: ThrottledRequests
+      Dimensions:
+        - Name: TableName
+          Value: !Ref ResultsTable
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions: [!Ref AlertsTopic]
+
+  TableSystemErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${ProjectName}-dynamodb-syserrors-${Stage}"
+      AlarmDescription: DynamoDB is returning server-side errors on the results table.
+      Namespace: AWS/DynamoDB
+      MetricName: SystemErrors
+      Dimensions:
+        - Name: TableName
+          Value: !Ref ResultsTable
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions: [!Ref AlertsTopic]
+
 Outputs:
   ResultsTableName:
     Description: DynamoDB table for reconciliation results + audit trail
@@ -144,3 +245,6 @@ Outputs:
   AppRoleArn:
     Description: Least-privilege role the application runtime should assume
     Value: !GetAtt AppRole.Arn
+  AlertsTopicArn:
+    Description: SNS topic for spend and table alarms (subscribe an email here)
+    Value: !Ref AlertsTopic

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from typing import TypedDict
 
 from rapidfuzz import fuzz
@@ -35,8 +36,10 @@ TAX_TOLERANCE: float = 2.0
 # invoice equality (separator/case typos) or trailing-serial identity backed
 # by vendor-name agreement. Raw high ratios alone are NOT sufficient — two
 # different invoices from the same vendor (…/075 vs …/078) score 92% similar
-# yet must never match for free.
-L1_VENDOR_RATIO: int = 60
+# yet must never match for free. The 90% vendor bar keeps the demo's
+# abbreviation-only vendor ("Acme Corporation Pvt Ltd" vs "Acme Corp", 61%)
+# out of Layer 1 — that pair is Layer 2's job, on real Converse calls.
+L1_VENDOR_RATIO: int = 90
 L2_FUZZ_RATIO: int = 60
 
 # Confidences the dashboard renders per engine. Layer 1 derives its figure
@@ -71,6 +74,18 @@ def _get_client():
     return _client
 
 
+def _extract_usage(response: dict) -> dict:
+    """Pull Converse token usage out of a response; {} when absent."""
+    try:
+        return response.get("usage", {})
+    except Exception:  # noqa: BLE001 — absent usage must never break matching
+        return {}
+
+
+# Populated by call_bedrock_converse; read immediately after by _model_verdict.
+_last_usage: dict = {}
+
+
 def call_bedrock_converse(model_id: str, prompt: str) -> str:
     """Stateless, deterministic (temperature 0) Converse call; reply uppercased."""
     response = _get_client().converse(
@@ -78,6 +93,8 @@ def call_bedrock_converse(model_id: str, prompt: str) -> str:
         messages=[{"role": "user", "content": [{"text": prompt}]}],
         inferenceConfig={"temperature": 0.0, "maxTokens": 16},
     )
+    global _last_usage
+    _last_usage = _extract_usage(response)
     return response["output"]["message"]["content"][0]["text"].strip().upper()
 
 
@@ -90,23 +107,34 @@ def _model_verdict(model_id: str, model_name: str, prompt: str,
     check would read "NO MATCH" as a match and defeat the corroboration
     gate's whole purpose in the production seam.
 
+    The reply may carry cost attributes (input_tokens / output_tokens /
+    latency_ms — emitted by the JSON matcher when the caller asks for them);
+    they are copied onto the Verdict for the per-run cost ledger.
+
     Cascade contract on failure: a model ERROR stops the cascade (infrastructure
     fault, not a verdict; escalating would double spend and latency on an
     outage path and hammer the premium tier during throttling). The caller
     surfaces ERROR; a rerun retries it.
     """
+    started = time.perf_counter()
     try:
         reply = call_bedrock_converse(model_id, prompt)
     except Exception as exc:  # noqa: BLE001 — degradation, never a fake MATCH
         return Verdict(status="ERROR", confidence=0, engine=model_name,
                        detail=f"{type(exc).__name__}: {exc}")
     matched = re.fullmatch(r"MATCH", reply) is not None
-    return Verdict(
+    usage = _last_usage or {}
+    v = Verdict(
         status="MATCHED" if matched else "UNRECONCILED",
         confidence=confidence if matched else 0,
         engine=model_name,
         detail=f"model replied {reply!r}",
     )
+    if usage:
+        v["input_tokens"] = int(usage.get("inputTokens", 0))
+        v["output_tokens"] = int(usage.get("outputTokens", 0))
+        v["latency_ms"] = int((time.perf_counter() - started) * 1000)
+    return v
 
 
 def dual_engine_reconciliation(
@@ -174,6 +202,17 @@ def dual_engine_reconciliation(
 
     # ── Layer 3: Claude Sonnet 4.5, $3 / 1M, deep reasoning ────────────────
     return _model_verdict(CLAUDE_SONNET, "Claude Sonnet 4.5", prompt, L3_CONFIDENCE)
+
+
+# Published per-1M-input-token prices (us-east-1, 2026-09) for the demo's
+# cost narration; Converse input here is ~200 tokens, so each model call is
+# a rounding error — the story is the ratio, not the rupee.
+ENGINE_COST: dict[str, float] = {
+    "RapidFuzz": 0.0,
+    "Nova Micro": 0.035,
+    "Claude Sonnet 4.5": 3.0,
+    "Local matcher": 0.0,
+}
 
 
 def _norm(s: str) -> str:

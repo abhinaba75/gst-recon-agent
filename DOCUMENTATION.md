@@ -135,27 +135,36 @@ clickable and judge-ready **with zero AWS dependencies**, and the sidebar toggle
 ```
 recon-agent/
 ├── frontend/
-│   └── app.py                      # THE dashboard (see §7). ~560 lines, fully typed.
+│   └── app.py                      # THE dashboard (see §7): pipeline, cost ledger,
+│                                   #   history panel, S3 archiving, dispatch flow
+├── backend/
+│   ├── orchestrator.py             #   Strands Agent orchestrator seam
+│   ├── tools/smart_router.py       #   Tiered cost cascade: RapidFuzz → Nova → Sonnet
+│   ├── subagents/comms_agent.py    #   A2A WhatsApp recovery (Twilio or audited simulation)
+│   ├── db/results.py               #   DynamoDB persistence: runs + dispatch audit trail
+│   ├── db/uploads.py               #   S3 archive: every uploaded document, content-addressed
+│   └── parser/gstr2b.py            #   Real-schema GSTN parser (b2b_4/b2b_5 envelopes,
+│                                   #   string numerics, junk tolerance)
 ├── fixtures/
 │   ├── generate_mock_data.py       # Deterministic synthetic-data generator (see §5)
 │   ├── sample_purchase_register.xlsx  # Generated: 12 invoices, ₹1,07,971 ITC
 │   └── sample_gstr2b.json          # Generated: 11 invoices, ₹1,12,380 ITC
 ├── tests/
-│   ├── validate_fixtures.py        # 20 data/pipeline assertions (no pytest needed)
-│   └── smoke_ui.py                 # 10 headless Streamlit AppTest UI checks
+│   ├── validate_fixtures.py        # 43 data/pipeline assertions (no pytest needed)
+│   ├── test_smart_router.py        # 16 tiered-router tests (stubbed Converse)
+│   ├── test_backend.py             # 41 persistence/comms/parser/archive tests
+│   └── smoke_ui.py                 # 11 headless Streamlit AppTest UI checks
+├── infrastructure/
+│   └── recon-agent-core.yaml       # CloudFormation: DynamoDB, private S3, least-privilege
+│                                   #   IAM, SNS + budget + CloudWatch alarms (see §11.4)
+├── .github/workflows/ci.yml        # CI: all four suites on every push/PR, AWS fenced off
 ├── .streamlit/
 │   └── config.toml                 # War-room theme (ledger navy, brass, serif/plex fonts)
-├── requirements.txt                # streamlit>=1.44, pandas>=2.0, openpyxl>=3.1
+├── requirements.txt                # streamlit, pandas, openpyxl, boto3, rapidfuzz,
+│                                   #   twilio, python-dotenv
 ├── run.sh                          # Preview launcher: binds 0.0.0.0, honours $PORT
-├── .gitignore                      # venv, __pycache__, secrets.toml
+├── .gitignore                      # venv, __pycache__, secrets, key material, dumps
 └── README.md                       # High-level story (problem, AWS stack, arch)
-├── backend/                        # ← DeepSeek's scope (not in repo yet)
-│   ├── orchestrator.py             #   Strands Agent orchestrator
-│   ├── subagents/comms_agent.py    #   A2A WhatsApp recovery agent
-│   ├── tools/fuzzy_matcher.py      #   MCP tool: embeddings + string metrics
-│   ├── tools/twilio_client.py      #   WhatsApp dispatch
-│   ├── db/dynamodb_handler.py      #   State persistence
-│   └── parser/gstr2b_ingest.py     #   S3-triggered Lambda parser
 ```
 
 ### 4.1 `fixtures/generate_mock_data.py`
@@ -425,8 +434,10 @@ the preview/modal UX stays identical either way.
 Both suites are dependency-light (no pytest) and exit non-zero on any failure.
 
 ```bash
-.venv/bin/python tests/validate_fixtures.py   # 20 assertions — data + both engines
-.venv/bin/python tests/smoke_ui.py            # 10 assertions — headless UI + dialog flow
+.venv/bin/python tests/validate_fixtures.py   # 43 assertions — data + both engines
+.venv/bin/python tests/test_smart_router.py   # 16 assertions — tiered cost router
+.venv/bin/python tests/test_backend.py        # 41 assertions — persistence, comms, parser, archive
+.venv/bin/python tests/smoke_ui.py            # 11 assertions — headless UI + dialog flow
 ```
 
 **validate_fixtures** asserts: column order; 12/11 row counts; `fp == 082026`; VLOOKUP 6/6
@@ -439,11 +450,12 @@ confidences within 0–100; WhatsApp template contains *Rule 88D / GSTR-1 / Augu
 (₹1,07,971 / ₹57,210 / ₹30,690 / ₹20,071); ≥2 dataframes; the three `wa-*` buttons; and after a
 click: no exception, `wa_modal` set in session state, `[A2A]` delegation in the log.
 
-**Current status: 99 checks passing across four suites** — 48 fixture/pipeline assertions,
-13 tiered-router tests (`tests/test_smart_router.py`), 27 backend tests
-(`tests/test_backend.py`: persistence guards, stubbed DynamoDB, comms-agent modes and audit
-rows), and 11 headless UI checks. Test runs never write to the deployed table (persistence
-is stubbed and call-counted in the suites).
+**Current status: 111 checks passing across four suites** — 43 fixture/pipeline assertions,
+16 tiered-router tests (`tests/test_smart_router.py`), 41 backend tests
+(`tests/test_backend.py`: persistence guards, stubbed DynamoDB/S3, comms-agent modes, audit
+rows, the real-schema GSTR-2B parser, and the S3 archive), and 11 headless UI checks. Test
+runs never write to deployed AWS resources (persistence is stubbed and call-counted in the
+suites; CI fences the credentials off entirely).
 
 Hardened after pre-merge review: model verdicts must be a bare `MATCH` ("NO MATCH" and
 "NOT A MATCH" degrade to UNRECONCILED instead of reading as matches); the pipeline cache
@@ -531,7 +543,7 @@ Invariants the orchestrator must honour (they are what makes the product defensi
 |---|---|---|
 | `run_recon_pipeline(use_bedrock=True)` | warns + calls fallback | POST books+portal to the Strands orchestrator endpoint (AgentCore Runtime / Lambda URL), parse `Match[]`. Every cache-miss run is persisted to the DynamoDB audit trail via `backend/db/results.py` — degraded (Bedrock-outage) runs included, stored with `degraded=true`; downstream analytics exclude flagged rows. |
 | `render_wa_modal` → Confirm dispatch | **live seam** — `backend/subagents/comms_agent.send_recovery_notice()` | Twilio WhatsApp send when `TWILIO_*` keys are set; clearly-labelled audited simulation otherwise. Phones are normalised (E.164, India-first) before the mode branch — both paths audit the number that would actually be used, and junk numbers fail identically in either mode. Every attempt (delivered, simulated, failed, invalid phone, no-phone) is a DynamoDB audit row. |
-| `load_data()` | local files / uploads | optionally fetch S3-processed period data by `fp`. |
+| `load_data()` | local files / uploads; `backend/parser/gstr2b.py` parses the payload (real GSTN schemas: `b2b_4`/`b2b_5` envelopes, string numerics, junk-tolerant) | optionally fetch S3-processed period data by `fp`. Uploaded source documents are archived to the private S3 bucket by `backend/db/uploads.py` (content-addressed, AES256, graceful when unconfigured). |
 
 Recommended env vars (backend reads via `process.env`/Lambda config; nothing hard-coded here):
 `RECON_API_BASE_URL`, `RECON_API_KEY`, `RECON_AGENTCORE_ARN`, `TWILIO_*` (backend-side only).
@@ -550,14 +562,23 @@ us-east-1) provisions, all tagged `project=recon-agent`:
 
 | Resource | Name | Notes |
 |---|---|---|
-| DynamoDB | `recon-agent-results-demo` | pk/sk single-table: `run#<period>` results ledger (with a `degraded` flag for Bedrock-outage runs), `dispatch#<period>` A2A audit. SSE + PITR. |
-| S3 | `recon-agent-uploads-demo-<account>` | Private (all four public-access blocks), versioned, AES256. |
+| DynamoDB | `recon-agent-results-demo` | pk/sk single-table: `run#<period>` results ledger (with `degraded` flag and per-engine cost counters), `dispatch#<period>` A2A audit. SSE + PITR. |
+| S3 | `recon-agent-uploads-demo-<account>` | Private (all four public-access blocks), versioned, AES256. Receives every uploaded source document, content-addressed under `uploads/<period>/<sha256[:16]>/`. |
 | IAM | `recon-agent-app-role-demo` / user `recon-agent-app` | Least-privilege: DynamoDB data ops, the one uploads bucket, Bedrock invoke on exactly the three router models. |
+| SNS | `recon-agent-alerts-demo` | Fan-out for the budget notifications and the two table alarms below (subscribe an email via the stack output). |
+| Budget | `recon-agent-demo-spend-demo` | $5/month cost budget; notifies the alerts topic at 80% and 100%. |
+| CloudWatch | `recon-agent-dynamodb-{throttles,syserrors}-demo` | Alarm on `ThrottledRequests` / `SystemErrors` for the results table → alerts topic. |
 
 The dashboard reads resource names from env (`RECON_RESULTS_TABLE`, `RECON_UPLOADS_BUCKET`,
 `RECON_APP_ROLE_ARN`, `RECON_AWS_REGION`) — nothing hard-coded. Bedrock model access itself
 is a console-only account entitlement (agreement acceptance, no API exists); it is tracked
 with AWS support and is the last blocked piece — every layer around it is live.
+
+**Deployment status:** the stack update carrying the observability resources (SNS, budget,
+alarms) is validated and ready — cfn-lint clean at the error level — but CloudFormation
+control-plane is deliberately outside the scoped app user's policy, so the redeploy itself
+runs from an admin session. Everything else (DynamoDB, S3, IAM) was deployed earlier and is
+in use.
 
 ---
 
@@ -586,6 +607,9 @@ with AWS support and is the last blocked piece — every layer around it is live
   agreement acceptance) is with AWS support; until it lands the Bedrock toggle degrades to
   the local matcher with a visible warning, exactly as designed. The Converse wiring,
   cost-tiered router and IAM scoping are all live and tested.
+- **Stack observability resources are deploy-ready, not deployed**: the SNS topic, spend
+  budget and DynamoDB alarms are in the template and validated; the redeploy needs an admin
+  session because the scoped app user (correctly) has no CloudFormation permissions.
 - **WhatsApp dispatch is live-seamed, mode-labelled**: with Twilio keys it really sends;
   without them the Comms Agent records an audited simulation in DynamoDB. The modal states
   the mode explicitly — a simulated send can never pass as delivered.

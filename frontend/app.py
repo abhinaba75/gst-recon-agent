@@ -105,6 +105,9 @@ class Match:
     ai_conf: float = 0.0
     similarity: float = 0.0
     reason: str = ""
+    engine: str = ""             # which tier claimed the rescue (cost ledger)
+    input_tokens: int = 0        # Converse usage, when a model decided
+    output_tokens: int = 0
 
     @property
     def label(self) -> str:
@@ -131,20 +134,19 @@ BEDROCK_MODEL_ID: Final = os.environ.get(
 )
 
 
+def _engine_costs() -> dict[str, float]:
+    """Published per-1M-token prices per engine, for cost narration."""
+    from backend.tools import smart_router
+
+    return smart_router.ENGINE_COST
+
+
 def _bedrock_client():
     # Model access for this account is deployed in us-east-1; keep every
     # default aligned on that region so the UI cannot claim a wrong endpoint.
     region = (os.environ.get("RECON_AWS_REGION")
               or os.environ.get("AWS_REGION") or "us-east-1")
     return boto3.client("bedrock-runtime", region_name=region)
-
-
-def _parse_verdict(text: str) -> dict | None:
-    """Extract the one JSON object from a model reply; None if unparseable."""
-    try:
-        return json.loads(text[text.index("{"): text.rindex("}") + 1])
-    except (ValueError, json.JSONDecodeError):
-        return None
 
 
 def _corroborate(books: pd.DataFrame, b: int, p: PortalRow) -> bool:
@@ -160,7 +162,9 @@ def _corroborate(books: pd.DataFrame, b: int, p: PortalRow) -> bool:
 
 
 def _build_match(books: pd.DataFrame, b: int, p: PortalRow,
-                 status: str, conf: float, reason: str) -> Match:
+                 status: str, conf: float, reason: str, *,
+                 engine: str = "", input_tokens: int = 0,
+                 output_tokens: int = 0) -> Match:
     return Match(
         register_no=str(books.at[b, "invoice_no"]),
         portal_no=p.inum,
@@ -171,7 +175,17 @@ def _build_match(books: pd.DataFrame, b: int, p: PortalRow,
         ai_conf=round(conf * 100),
         similarity=_similarity(str(books.at[b, "supplier_name"]), p.trdnm),
         reason=reason,
+        engine=engine,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
     )
+
+
+def _router():
+    """The cost cascade (lazy import keeps Streamlit cold starts cheap)."""
+    from backend.tools import smart_router
+
+    return smart_router
 
 
 def _reconcile_deterministic(
@@ -235,32 +249,20 @@ def _classify_remainder(books: pd.DataFrame, portal: list[PortalRow],
 def _bedrock_semantic_matcher(
     books: pd.DataFrame, portal: list[PortalRow], min_conf: float = 0.75
 ) -> list[Match]:
-    """Tier 2 on AWS Bedrock (Converse API), standing in for the planned MCP tool.
+    """Semantic tier through the cost cascade (backend/tools/smart_router.py).
 
-    Python gates every candidate through tax+GSTIN corroboration first; the
-    model only decides whether a corroborated candidate is the *same document*
-    (invoice-number formats, trailing serials, trade-name abbreviations). Its
-    JSON verdict is parsed, hallucination-checked against the candidate list,
-    and clamped. One-to-one conservation is enforced here, not trusted to the
-    model.
+    Python gates every candidate through tax+GSTIN corroboration first, then
+    the tiered router decides per pair: RapidFuzz evidence rules (free) →
+    Nova Micro (moderate) → Claude Sonnet 4.5 (hard). Best claim wins per
+    books row; one-to-one conservation is enforced here, not trusted to any
+    engine. The router may only re-identify rows — it can never re-price or
+    re-attribute money (Layer-0 gate, fail-closed).
     """
     matches, used, used_portal = _reconcile_deterministic(books, portal)
     log_run(f"[AGENT] Tier-1 deterministic pass: {len(matches)} exact matches")
 
-    client = _bedrock_client()
-    system = (
-        "You are the Fuzzy Matcher inside Recon-Agent, an Indian GST ITC "
-        "reconciliation agent. Buyer and supplier identity are already "
-        "verified (GSTIN equal, tax equal to the rupee). Decide whether a "
-        "books invoice and a portal (GSTR-2B) invoice are the same commercial "
-        "document, judging only invoice-number formats (separators, prefixes, "
-        "financial-year fragments), trailing serial numbers, trade-name "
-        "abbreviations and dates. Be conservative: differing serial numbers or "
-        "unrelated names mean NO_MATCH. Reply with ONLY one JSON object: "
-        '{"match": "<portal inum or null>", "confidence": <0-100>, '
-        '"reason": "<= 12 words"}'
-    )
-
+    _bedrock_client()  # fail fast (degradation handled by the caller)
+    router = _router()
     rescued = 0
     for b in range(len(books)):
         if b in used:
@@ -269,48 +271,53 @@ def _bedrock_semantic_matcher(
                       if p.inum not in used_portal and _corroborate(books, b, p)]
         if not candidates:
             continue
-        row = {
-            "books_invoice": {
-                "invoice_no": str(books.at[b, "invoice_no"]),
-                "supplier_name": str(books.at[b, "supplier_name"]),
-                "invoice_date": str(books.at[b, "invoice_date"]),
-                "tax": round(float(books.at[b, "total_tax"]), 2),
-            },
-            "portal_candidates": [
-                {"inum": p.inum, "trade_name": p.trdnm, "date": p.idt, "tax": p.tax}
-                for p in candidates
-            ],
-        }
-        resp = client.converse(
-            modelId=BEDROCK_MODEL_ID,
-            system=[{"text": system}],
-            messages=[{"role": "user", "content": [{"text": json.dumps(row)}]}],
-            inferenceConfig={"temperature": 0.0, "maxTokens": 200},
-        )
-        text = resp["output"]["message"]["content"][0]["text"]
-        verdict = _parse_verdict(text)
-        if verdict is None:
-            log_run(f"[AGENT] Bedrock returned an unparseable verdict for "
-                    f"'{books.at[b, 'invoice_no']}' — left unmatched")
+        # The cost cascade decides per pair: free RapidFuzz evidence rules
+        # first, Nova Micro for moderate cases, Claude Sonnet 4.5 for the
+        # hardest. Model involvement is the exception, not the default.
+        reg_vendor = str(books.at[b, "supplier_name"])
+        best: tuple[int, PortalRow, dict] | None = None  # (conf, row, verdict)
+        for p in candidates:
+            verdict = router.dual_engine_reconciliation(
+                reg_inv=str(books.at[b, "invoice_no"]),
+                portal_inv=p.inum,
+                reg_vendor=reg_vendor,
+                portal_vendor=p.trdnm,
+                books_tax=round(float(books.at[b, "total_tax"]), 2),
+                portal_tax=p.tax,
+                books_gstin=str(books.at[b, "supplier_gstin"]),
+                portal_gstin=p.ctin,
+            )
+            if verdict["status"] != "MATCHED":
+                continue
+            conf = max(0.0, min(float(verdict["confidence"]), 100.0))
+            if best is None or conf > best[0]:
+                best = (int(conf), p, verdict)
+        if best is None:
+            log_run(f"[AGENT] Cascade → '{books.at[b, 'invoice_no']}': no engine "
+                    f"claimed it — left unmatched")
             continue
-        chosen = next((p for p in candidates if p.inum == verdict.get("match")), None)
-        if chosen is None:
-            log_run(f"[AGENT] Bedrock → '{books.at[b, 'invoice_no']}': NO_MATCH")
-            continue
-        conf = max(0.0, min(float(verdict.get("confidence", 0)), 100.0)) / 100.0
-        if conf < min_conf:
-            log_run(f"[AGENT] Bedrock → '{books.at[b, 'invoice_no']}': below "
-                    f"threshold ({conf:.0%})")
+        conf, chosen, verdict = best
+        if conf / 100.0 < min_conf:
+            log_run(f"[AGENT] Cascade → '{books.at[b, 'invoice_no']}': below "
+                    f"threshold ({conf}%) — left unmatched")
             continue
         matches.append(_build_match(
-            books, b, chosen, "ai", conf,
-            f"Bedrock semantic ID · tax+GSTIN corroborated · {verdict.get('reason', '')}",
+            books, b, chosen, "ai", conf / 100.0,
+            f"{verdict['engine']} semantic ID · tax+GSTIN corroborated · "
+            f"{verdict.get('detail', '')[:80]}",
+            engine=verdict["engine"],
+            input_tokens=int(verdict.get("input_tokens", 0) or 0),
+            output_tokens=int(verdict.get("output_tokens", 0) or 0),
         ))
         used.add(b)
         used_portal.add(chosen.inum)
         rescued += 1
-        log_run(f"[AGENT] Bedrock → '{books.at[b, 'invoice_no']}' ⇄ "
-                f"'{chosen.inum}' ({conf:.0%})")
+        cost_note = (f" · ₹{router.ENGINE_COST[verdict['engine']]:.3f}/1M tok"
+                     if verdict["engine"] in router.ENGINE_COST
+                     and verdict["engine"] != "RapidFuzz"
+                     else " · ₹0.00")
+        log_run(f"[AGENT] {verdict['engine']} → '{books.at[b, 'invoice_no']}' ⇄ "
+                f"'{chosen.inum}' ({conf}%){cost_note}")
 
     _classify_remainder(books, portal, matches, used, used_portal)
     log_run(f"[AGENT] Bedrock semantic pass completed ({rescued} rescued)")
@@ -351,6 +358,7 @@ def _fallback_semantic_matcher(
             matches.append(_build_match(
                 books, b, p, "ai", best[0],
                 f"Tax corroborated · GSTIN verified · numeral overlap on '{p.inum}'",
+                engine="Local matcher",
             ))
             used.add(b)
             used_portal.add(p.inum)
@@ -364,26 +372,31 @@ def _fallback_semantic_matcher(
 #  Data loading
 # ══════════════════════════════════════════════════════════════════════════
 def _parse_portal(payload: dict) -> list[PortalRow]:
+    """Parse via the real-schema GSTN parser (backend/parser/gstr2b.py).
+
+    The backend module absorbs the versioned download envelopes (b2b_4/b2b_5)
+    and junk numerics real portal JSONs carry; this function just maps its
+    flat dicts onto the app's PortalRow. The fixture shape is a subset, so
+    the demo data flows through the same production parser.
+    """
+    from backend.parser import gstr2b
+
     rows: list[PortalRow] = []
-    for sup in payload.get("b2b", []):
-        for inv in sup.get("inv", []):
-            items = inv.get("items", [{}])
-            agg = {k: round(sum(i.get(k, 0.0) for i in items), 2)
-                   for k in ("txval", "iamt", "camt", "samt")}
-            rows.append(
-                PortalRow(
-                    ctin=str(sup.get("ctin", "")),
-                    trdnm=str(sup.get("trdnm", "")),
-                    inum=str(inv.get("inum", "")),
-                    idt=str(inv.get("idt", "")),
-                    val=float(inv.get("val", 0.0)),
-                    itcavl=str(inv.get("itcavl", "N")),
-                    txval=agg["txval"],
-                    igst=agg["iamt"],
-                    cgst=agg["camt"],
-                    sgst=agg["samt"],
-                )
+    for r in gstr2b.parse_gstr2b(payload):
+        rows.append(
+            PortalRow(
+                ctin=r["ctin"],
+                trdnm=r["trdnm"],
+                inum=r["inum"],
+                idt=r["idt"],
+                val=r["val"],
+                itcavl=r["itcavl"],
+                txval=r["txval"],
+                igst=r["igst"],
+                cgst=r["cgst"],
+                sgst=r["sgst"],
             )
+        )
     return rows
 
 
@@ -448,13 +461,20 @@ def _persist_run(books: pd.DataFrame, portal: list[PortalRow],
     """
     try:
         from backend.db import results as db
+        engine_usage: dict[str, int] = {}
+        for m in matches:
+            if m.status == "ai" and m.engine:
+                engine_usage[m.engine] = engine_usage.get(m.engine, 0) + 1
         run_id = db.persist_run(
             DEMO_PERIOD, len(books), len(portal), matches,
             {"total": float(books["total_tax"].sum()),
              "exact": sum(m.tax for m in matches if m.status == "exact"),
              "ai": sum(m.tax for m in matches if m.status == "ai"),
-             "risk": sum(m.tax for m in matches if m.status == "missing")},
+             "risk": sum(m.tax for m in matches if m.status == "missing"),
+             "tokens_in": sum(m.input_tokens for m in matches),
+             "tokens_out": sum(m.output_tokens for m in matches)},
             degraded=degraded,
+            engine_usage=engine_usage,
         )
     except Exception as exc:  # noqa: BLE001 — persistence must not break the demo
         log_run(f"[DB] Persistence unavailable ({type(exc).__name__}) — run not stored")
@@ -707,6 +727,42 @@ def render_wa_modal(matches: list[Match], period: str) -> None:
         _close_wa_modal()
 
 
+def render_history_panel() -> None:
+    """Period history from the DynamoDB audit trail — the system remembers.
+
+    Surface in the agent log area: one expandable panel listing recent runs
+    (engine mix + token usage from the persisted ledger), so a demo run is
+    visibly part of a sequence, not a one-off. Degrades to nothing when the
+    table is unreachable.
+    """
+    try:
+        from backend.db import results as db
+        runs = db.recent_runs(DEMO_PERIOD, limit=8)
+    except Exception:  # noqa: BLE001 — history is a bonus, never fatal
+        runs = []
+    if not runs:
+        return
+    with st.expander("Period history (DynamoDB audit trail)", expanded=False):
+        rows = []
+        for r in runs:
+            engines = " · ".join(f"{e} ×{n}" for e, n in r.get("engines", {}).items()) or "deterministic-only"
+            tok = ""
+            if r.get("tokens_in") or r.get("tokens_out"):
+                tok = f" · {r['tokens_in']:,}+{r['tokens_out']:,} tok"
+            rows.append({
+                "Run": r["run_id"],
+                "When (UTC)": r["at"],
+                "Books×2B": f"{r['books']}×{r['portal']}",
+                "Rescued": inr(float(r["rescued"])),
+                "At Risk": inr(float(r["risk"])),
+                "Engines": engines + tok,
+                "Mode": "degraded (local fallback)" if r.get("degraded") else "live",
+            })
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+        st.caption("Every cache-miss run of this period is recorded here — "
+                   "degraded (Bedrock-outage) runs are flagged, never hidden.")
+
+
 def render_agent_log() -> None:
     with st.expander("Agent activity log", expanded=False):
         # One-time events + this rerun's narration, merged by timestamp.
@@ -740,12 +796,30 @@ def render_dashboard(books: pd.DataFrame, portal: list[PortalRow]) -> None:
     c4.metric("ITC at High Risk", inr(risk),
               delta="Rule 88D exposure", delta_color="inverse")
 
+    # Cost ledger — the economics of the cascade, per run, from real usage.
+    costs = _engine_costs()
+    ai_rows = [m for m in matches if m.status == "ai" and m.engine]
+    if ai_rows:
+        by_engine: dict[str, list[Match]] = {}
+        for m in ai_rows:
+            by_engine.setdefault(m.engine, []).append(m)
+        tok_in = sum(m.input_tokens for m in ai_rows)
+        tok_out = sum(m.output_tokens for m in ai_rows)
+        usd = sum(costs.get(m.engine, 0.0) * (m.input_tokens + m.output_tokens) / 1_000_000
+                  for m in ai_rows)
+        parts = [f"{e} ×{len(rows)}" for e, rows in sorted(
+            by_engine.items(), key=lambda kv: costs.get(kv[0], 0.0))]
+        tok_note = f" · {tok_in:,}+{tok_out:,} tok" if tok_in else ""
+        st.caption("Cost cascade: " + " · ".join(parts)
+                   + f" · ≈${usd:.6f} this run{tok_note}")
+
     st.divider()
     render_side_by_side(excel, matches)
     st.divider()
     render_recovery_panel(matches, DEMO_PERIOD)
     st.divider()
     render_full_ledger(matches)
+    render_history_panel()
     render_agent_log()
     render_wa_modal(matches, DEMO_PERIOD)
 
@@ -758,7 +832,8 @@ def render_full_ledger(matches: list[Match]) -> None:
             "Books Invoice": m.register_no, "Portal Invoice": m.portal_no,
             "Supplier": m.supplier_name, "GSTIN": m.supplier_gstin,
             "ITC": inr(m.tax), "Status": m.label,
-            "Confidence": f"{m.ai_conf}%", "Evidence": m.reason,
+            "Confidence": f"{m.ai_conf}%", "Engine": m.engine or "—",
+            "Evidence": m.reason,
         }
         for m in matches
     ]
@@ -781,25 +856,38 @@ def sidebar() -> None:
         json_up = st.file_uploader("GSTR-2B (.json)", type=["json"])
         if books_up and json_up and st.button("Reconcile uploaded files", type="primary"):
             books = pd.read_excel(books_up)
-            payload = json.loads(json_up.read().decode("utf-8"))
+            raw_2b = json_up.read()
+            payload = json.loads(raw_2b.decode("utf-8"))
             st.session_state["uploads"] = (books, payload)
             log("[AGENT] Uploaded dataset loaded")
+            # Audit leg 2: the exact input bytes land in the private S3
+            # archive (content-addressed; re-uploads are no-ops). Never fatal.
+            try:
+                from backend.db import uploads
+                k1 = uploads.archive_upload(raw_2b, json_up.name, period=DEMO_PERIOD)
+                k2 = uploads.archive_upload(books_up.getvalue(), books_up.name,
+                                            period=DEMO_PERIOD)
+                if k1 and k2:
+                    log("[S3] Both source documents archived to the uploads bucket")
+                else:
+                    log("[S3] Archive unavailable — documents not stored")
+            except Exception as exc:  # noqa: BLE001 — archiving must not block
+                log(f"[S3] Archive error ({type(exc).__name__}) — documents not stored")
         if st.button("Reset to demo fixtures"):
             st.session_state.pop("uploads", None)
             st.rerun()
         st.divider()
         st.markdown("#### Backend")
-        use_bedrock = st.toggle("Use AWS Bedrock semantic pass", value=False,
-                                help="On = Claude on Bedrock re-identifies corroborated "
-                                     "rows. Falls back to the local matcher if AWS is "
-                                     "unreachable.")
+        use_bedrock = st.toggle("Use AWS Bedrock cost cascade", value=False,
+                                help="On = RapidFuzz → Nova Micro → Claude Sonnet 4.5, "
+                                     "per pair, with the free tier first. Falls back to "
+                                     "the local matcher if AWS is unreachable.")
         if use_bedrock:
             region = (os.environ.get("RECON_AWS_REGION") or os.environ.get("AWS_REGION")
                       or "us-east-1")
-            model = BEDROCK_MODEL_ID.rsplit(".", 1)[-1]
             creds = ("credentials detected" if os.environ.get("AWS_ACCESS_KEY_ID")
                      else "no AWS credentials — will fall back")
-            st.caption(f"Bedrock Converse · {model} · {region} · {creds}")
+            st.caption(f"RapidFuzz → Nova → Sonnet · {region} · {creds}")
         else:
             st.caption("Local semantic matcher, zero cloud dependency")
         st.session_state["use_bedrock"] = use_bedrock
