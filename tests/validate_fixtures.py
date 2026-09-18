@@ -2,6 +2,9 @@
 """Deterministic validation of Recon-Agent fixtures and both pipelines.
 
 Run directly (no pytest needed):  python tests/validate_fixtures.py
+
+Persistence is stubbed for the whole suite: runs are counted and their
+``degraded`` flag asserted, but nothing ever reaches the deployed DynamoDB.
 """
 
 from __future__ import annotations
@@ -19,8 +22,19 @@ sys.path.insert(0, str(ROOT / "frontend"))
 
 import app  # noqa: E402  (Streamlit module import — no server started)
 
-# Tests must never write to the deployed DynamoDB audit trail.
+# Tests must never write to the deployed DynamoDB audit trail. The stub below
+# also counts persist_run calls so the degraded-persistence contract can be
+# asserted without touching real AWS.
 os.environ["RECON_RESULTS_TABLE"] = ""
+_persist_calls: list[bool] = []
+
+
+def _stub_persist_run(books, portal, matches, degraded=False):
+    _persist_calls.append(degraded)
+    return None
+
+
+app._persist_run = _stub_persist_run
 
 
 def main() -> int:
@@ -93,6 +107,14 @@ def main() -> int:
     acme_row = next(m for m in blank_matches if "081" in m.register_no)
     check("books row without GSTIN is never corroborated",
           acme_row.status == "missing", acme_row.status)
+    blank_portal = copy.deepcopy(payload)
+    for sup in blank_portal["b2b"]:
+        if sup["ctin"] == "27AABCA1234F1Z5":
+            sup["ctin"] = ""  # 2B row missing the ctin — blank == blank is not identity
+    bp_matches = app.run_recon_pipeline(books, app._parse_portal(blank_portal))
+    bp_acme = next(m for m in bp_matches if "081" in m.register_no)
+    check("two blank GSTINs never corroborate (fail-closed)",
+          bp_acme.status == "missing", bp_acme.status)
 
     print("== Bedrock verdict parser ==")
     ok = app._parse_verdict('{"match": "INV-081", "confidence": 94, "reason": "serial matches"}')
@@ -130,6 +152,17 @@ def main() -> int:
           calls["n"] == 2, f"{calls['n']} calls after rerun")
     check("retry returns consistent fallback classification",
           [m.register_no for m in again] == [m.register_no for m in degraded])
+
+    print("== Degraded runs are persisted, flagged, not authoritative ==")
+    # The two immediately preceding runs were the degraded pair.
+    check("degraded runs persisted, each flagged",
+          len(_persist_calls) >= 2 and _persist_calls[-2:] == [True, True],
+          str(_persist_calls))
+    b_healthy = books.copy()
+    b_healthy.loc[0, "vendor_phone"] = "+919999999999"  # fresh digest, same taxonomy
+    app.run_recon_pipeline(b_healthy, portal)  # healthy local run
+    check("healthy run persisted unflagged",
+          _persist_calls[-1] is False, str(_persist_calls))
 
     print("== Cache digest is portal-sensitive (corrected 2B is not stale) ==")
     # Same invoice numbers, corrected amounts: the cached classification must

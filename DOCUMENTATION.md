@@ -439,16 +439,25 @@ confidences within 0–100; WhatsApp template contains *Rule 88D / GSTR-1 / Augu
 (₹1,07,971 / ₹57,210 / ₹30,690 / ₹20,071); ≥2 dataframes; the three `wa-*` buttons; and after a
 click: no exception, `wa_modal` set in session state, `[A2A]` delegation in the log.
 
-**Current status: 89 checks passing across four suites** — 45 fixture/pipeline assertions,
-13 tiered-router tests (`tests/test_smart_router.py`), 20 backend tests
+**Current status: 99 checks passing across four suites** — 48 fixture/pipeline assertions,
+13 tiered-router tests (`tests/test_smart_router.py`), 27 backend tests
 (`tests/test_backend.py`: persistence guards, stubbed DynamoDB, comms-agent modes and audit
-rows), and 11 headless UI checks. Test runs never write to the deployed table.
+rows), and 11 headless UI checks. Test runs never write to the deployed table (persistence
+is stubbed and call-counted in the suites).
 
 Hardened after pre-merge review: model verdicts must be a bare `MATCH` ("NO MATCH" and
 "NOT A MATCH" degrade to UNRECONCILED instead of reading as matches); the pipeline cache
 digest covers portal tax/GSTIN/trade-name so a corrected GSTR-2B is never served stale;
 and a Bedrock outage degrades without caching the fallback output, so the next rerun
 retries Bedrock.
+
+Hardened after a second review round: the corroboration gate now fails closed in **both**
+implementations (`app._corroborate` and the backend router) — two blank GSTINs are never
+identity; degraded runs are persisted again but flagged `degraded=true` in DynamoDB (an
+outage is an audit fact; the rows are not authoritative) and surfaced in the sidebar;
+and the comms agent normalises the phone *before* the mode branch, so simulation can no
+longer record `ok=True` for a number Twilio would reject (trunk-prefixed `091 …` forms
+normalise to E.164, leading-zero numbers are rejected).
 
 ---
 
@@ -520,8 +529,8 @@ Invariants the orchestrator must honour (they are what makes the product defensi
 
 | Hook | Today | Production |
 |---|---|---|
-| `run_recon_pipeline(use_bedrock=True)` | warns + calls fallback | POST books+portal to the Strands orchestrator endpoint (AgentCore Runtime / Lambda URL), parse `Match[]`. Every cache-miss run is also persisted to the DynamoDB audit trail via `backend/db/results.py`. |
-| `render_wa_modal` → Confirm dispatch | **live seam** — `backend/subagents/comms_agent.send_recovery_notice()` | Twilio WhatsApp send when `TWILIO_*` keys are set; clearly-labelled audited simulation otherwise. Every attempt (delivered, simulated, failed, no-phone) is a DynamoDB audit row. |
+| `run_recon_pipeline(use_bedrock=True)` | warns + calls fallback | POST books+portal to the Strands orchestrator endpoint (AgentCore Runtime / Lambda URL), parse `Match[]`. Every cache-miss run is persisted to the DynamoDB audit trail via `backend/db/results.py` — degraded (Bedrock-outage) runs included, stored with `degraded=true`; downstream analytics exclude flagged rows. |
+| `render_wa_modal` → Confirm dispatch | **live seam** — `backend/subagents/comms_agent.send_recovery_notice()` | Twilio WhatsApp send when `TWILIO_*` keys are set; clearly-labelled audited simulation otherwise. Phones are normalised (E.164, India-first) before the mode branch — both paths audit the number that would actually be used, and junk numbers fail identically in either mode. Every attempt (delivered, simulated, failed, invalid phone, no-phone) is a DynamoDB audit row. |
 | `load_data()` | local files / uploads | optionally fetch S3-processed period data by `fp`. |
 
 Recommended env vars (backend reads via `process.env`/Lambda config; nothing hard-coded here):
@@ -541,7 +550,7 @@ us-east-1) provisions, all tagged `project=recon-agent`:
 
 | Resource | Name | Notes |
 |---|---|---|
-| DynamoDB | `recon-agent-results-demo` | pk/sk single-table: `run#<period>` results ledger, `dispatch#<period>` A2A audit. SSE + PITR. |
+| DynamoDB | `recon-agent-results-demo` | pk/sk single-table: `run#<period>` results ledger (with a `degraded` flag for Bedrock-outage runs), `dispatch#<period>` A2A audit. SSE + PITR. |
 | S3 | `recon-agent-uploads-demo-<account>` | Private (all four public-access blocks), versioned, AES256. |
 | IAM | `recon-agent-app-role-demo` / user `recon-agent-app` | Least-privilege: DynamoDB data ops, the one uploads bucket, Bedrock invoke on exactly the three router models. |
 
