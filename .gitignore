@@ -8,3 +8,10 @@ tempkeys.txt
 .env
 .env.*
 !.env.example
+# Never commit credential files or crash dumps.
+recon-key*
+*-key*.json
+*-key*.csv
+*.pem
+core
+core.*
