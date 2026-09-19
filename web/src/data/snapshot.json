@@ -1,0 +1,279 @@
+{
+  "generated_at": "2026-09-18T21:44:04Z",
+  "period": "August 2026",
+  "fp": "082026",
+  "recipient_gstin": "29AAACD5678M1Z2",
+  "totals": {
+    "total": 107971.0,
+    "exact": 57210.0,
+    "rescued": 30690.0,
+    "risk": 20071.0,
+    "write_off": 50761.0
+  },
+  "counts": {
+    "books": 12,
+    "portal": 11,
+    "excel_unmatched": 6,
+    "rescued": 3,
+    "missing": 3,
+    "portal_only": 2
+  },
+  "excel_unmatched": [
+    {
+      "register_no": "INV/24-25/081",
+      "supplier_name": "Acme Corporation Pvt Ltd",
+      "tax": 18000.0,
+      "portal_no": "—"
+    },
+    {
+      "register_no": "TAX/2026/019",
+      "supplier_name": "Zenith Logistics Pvt Ltd",
+      "tax": 2250.0,
+      "portal_no": "—"
+    },
+    {
+      "register_no": "BILL-907",
+      "supplier_name": "Nimbus Cloud Services",
+      "tax": 10440.0,
+      "portal_no": "—"
+    },
+    {
+      "register_no": "INV/24-25/088",
+      "supplier_name": "Vertex Industrial Supplies",
+      "tax": 14850.0,
+      "portal_no": "—"
+    },
+    {
+      "register_no": "TAX/2026/022",
+      "supplier_name": "Marathon Freight Movers",
+      "tax": 1830.0,
+      "portal_no": "—"
+    },
+    {
+      "register_no": "BILL-910",
+      "supplier_name": "Sahyadri Hardware Mart",
+      "tax": 3391.0,
+      "portal_no": "—"
+    }
+  ],
+  "matches": [
+    {
+      "register_no": "INV/24-25/075",
+      "portal_no": "INV/24-25/075",
+      "supplier_name": "Sunrise Polymers Pvt Ltd",
+      "supplier_gstin": "27AAECS4821K1ZP",
+      "tax": 15210.0,
+      "status": "exact",
+      "ai_conf": 100,
+      "similarity": 1.0,
+      "reason": "GSTIN + invoice + tax identical",
+      "engine": "",
+      "phone": "919822011456",
+      "email": "accounts@sunrisepolymers.in",
+      "message": "Dear Sunrise, Invoice INV/24-25/075 of ₹15,210 is missing from our GSTR-2B for August 2026. Please file your GSTR-1 before the 11th to prevent credit blockage under Rule 88D."
+    },
+    {
+      "register_no": "TAX/2026/014",
+      "portal_no": "TAX/2026/014",
+      "supplier_name": "Bharat Office Supplies",
+      "supplier_gstin": "29AAFCB9032L1ZQ",
+      "tax": 5760.0,
+      "status": "exact",
+      "ai_conf": 100,
+      "similarity": 1.0,
+      "reason": "GSTIN + invoice + tax identical",
+      "engine": "",
+      "phone": "919845023347",
+      "email": "accounts@bharatofficesupplies.in",
+      "message": "Dear Bharat, Invoice TAX/2026/014 of ₹5,760 is missing from our GSTR-2B for August 2026. Please file your GSTR-1 before the 11th to prevent credit blockage under Rule 88D."
+    },
+    {
+      "register_no": "INV/24-25/078",
+      "portal_no": "INV/24-25/078",
+      "supplier_name": "Deccan Chemicals LLP",
+      "supplier_gstin": "36AAGCD1156N1ZS",
+      "tax": 11016.0,
+      "status": "exact",
+      "ai_conf": 100,
+      "similarity": 1.0,
+      "reason": "GSTIN + invoice + tax identical",
+      "engine": "",
+      "phone": "919701133254",
+      "email": "accounts@deccanchemicals.in",
+      "message": "Dear Deccan, Invoice INV/24-25/078 of ₹11,016 is missing from our GSTR-2B for August 2026. Please file your GSTR-1 before the 11th to prevent credit blockage under Rule 88D."
+    },
+    {
+      "register_no": "BILL-902",
+      "portal_no": "BILL-902",
+      "supplier_name": "Kaveri Packaging",
+      "supplier_gstin": "29AAHCK2278P1ZT",
+      "tax": 3048.0,
+      "status": "exact",
+      "ai_conf": 100,
+      "similarity": 1.0,
+      "reason": "GSTIN + invoice + tax identical",
+      "engine": "",
+      "phone": "919886244510",
+      "email": "accounts@kaveripackaging.in",
+      "message": "Dear Kaveri, Invoice BILL-902 of ₹3,048 is missing from our GSTR-2B for August 2026. Please file your GSTR-1 before the 11th to prevent credit blockage under Rule 88D."
+    },
+    {
+      "register_no": "INV/24-25/083",
+      "portal_no": "INV/24-25/083",
+      "supplier_name": "Trident Facility Services",
+      "supplier_gstin": "29AAJCT5534Q1ZU",
+      "tax": 8802.0,
+      "status": "exact",
+      "ai_conf": 100,
+      "similarity": 1.0,
+      "reason": "GSTIN + invoice + tax identical",
+      "engine": "",
+      "phone": "919920355628",
+      "email": "accounts@tridentfacilities.in",
+      "message": "Dear Trident, Invoice INV/24-25/083 of ₹8,802 is missing from our GSTR-2B for August 2026. Please file your GSTR-1 before the 11th to prevent credit blockage under Rule 88D."
+    },
+    {
+      "register_no": "INV/24-25/085",
+      "portal_no": "INV/24-25/085",
+      "supplier_name": "Orion Electronics",
+      "supplier_gstin": "27AAKCO6645R1ZV",
+      "tax": 13374.0,
+      "status": "exact",
+      "ai_conf": 100,
+      "similarity": 1.0,
+      "reason": "GSTIN + invoice + tax identical",
+      "engine": "",
+      "phone": "919833366741",
+      "email": "accounts@orionelectronics.in",
+      "message": "Dear Orion, Invoice INV/24-25/085 of ₹13,374 is missing from our GSTR-2B for August 2026. Please file your GSTR-1 before the 11th to prevent credit blockage under Rule 88D."
+    },
+    {
+      "register_no": "INV/24-25/081",
+      "portal_no": "INV-081",
+      "supplier_name": "Acme Corporation Pvt Ltd",
+      "supplier_gstin": "27AABCA1234F1Z5",
+      "tax": 18000.0,
+      "status": "ai",
+      "ai_conf": 82,
+      "similarity": 0.552,
+      "reason": "Tax corroborated · GSTIN verified · numeral overlap on 'INV-081'",
+      "engine": "Local matcher",
+      "phone": "919876543210",
+      "email": "accounts@acmecorp.in",
+      "message": "Dear Acme, Invoice INV/24-25/081 of ₹18,000 is missing from our GSTR-2B for August 2026. Please file your GSTR-1 before the 11th to prevent credit blockage under Rule 88D."
+    },
+    {
+      "register_no": "TAX/2026/019",
+      "portal_no": "TAX-2026-019",
+      "supplier_name": "Zenith Logistics Pvt Ltd",
+      "supplier_gstin": "29AABCL5678G1Z3",
+      "tax": 2250.0,
+      "status": "ai",
+      "ai_conf": 93,
+      "similarity": 0.833,
+      "reason": "Tax corroborated · GSTIN verified · numeral overlap on 'TAX-2026-019'",
+      "engine": "Local matcher",
+      "phone": "919930588774",
+      "email": "accounts@zenithlogistics.in",
+      "message": "Dear Zenith, Invoice TAX/2026/019 of ₹2,250 is missing from our GSTR-2B for August 2026. Please file your GSTR-1 before the 11th to prevent credit blockage under Rule 88D."
+    },
+    {
+      "register_no": "BILL-907",
+      "portal_no": "INV-2026-907",
+      "supplier_name": "Nimbus Cloud Services",
+      "supplier_gstin": "27AACCN9901H1Z9",
+      "tax": 10440.0,
+      "status": "ai",
+      "ai_conf": 95,
+      "similarity": 0.864,
+      "reason": "Tax corroborated · GSTIN verified · numeral overlap on 'INV-2026-907'",
+      "engine": "Local matcher",
+      "phone": "919702599806",
+      "email": "accounts@nimbuscloud.in",
+      "message": "Dear Nimbus, Invoice BILL-907 of ₹10,440 is missing from our GSTR-2B for August 2026. Please file your GSTR-1 before the 11th to prevent credit blockage under Rule 88D."
+    },
+    {
+      "register_no": "INV/24-25/088",
+      "portal_no": "—",
+      "supplier_name": "Vertex Industrial Supplies",
+      "supplier_gstin": "27AAECV3345J1ZN",
+      "tax": 14850.0,
+      "status": "missing",
+      "ai_conf": 0,
+      "similarity": 0.0,
+      "reason": "Supplier has not filed GSTR-1 for the period",
+      "engine": "",
+      "phone": "919820177890",
+      "email": "accounts@vertexindustrial.in",
+      "message": "Dear Vertex, Invoice INV/24-25/088 of ₹14,850 is missing from our GSTR-2B for August 2026. Please file your GSTR-1 before the 11th to prevent credit blockage under Rule 88D."
+    },
+    {
+      "register_no": "TAX/2026/022",
+      "portal_no": "—",
+      "supplier_name": "Marathon Freight Movers",
+      "supplier_gstin": "27AAFCM7789K1ZP",
+      "tax": 1830.0,
+      "status": "missing",
+      "ai_conf": 0,
+      "similarity": 0.0,
+      "reason": "Supplier has not filed GSTR-1 for the period",
+      "engine": "",
+      "phone": "919845288925",
+      "email": "accounts@marathonfreight.in",
+      "message": "Dear Marathon, Invoice TAX/2026/022 of ₹1,830 is missing from our GSTR-2B for August 2026. Please file your GSTR-1 before the 11th to prevent credit blockage under Rule 88D."
+    },
+    {
+      "register_no": "BILL-910",
+      "portal_no": "—",
+      "supplier_name": "Sahyadri Hardware Mart",
+      "supplier_gstin": "27AAGCS1102L1ZQ",
+      "tax": 3391.0,
+      "status": "missing",
+      "ai_conf": 0,
+      "similarity": 0.0,
+      "reason": "Supplier has not filed GSTR-1 for the period",
+      "engine": "",
+      "phone": "919762399462",
+      "email": "accounts@sahyadrihardware.in",
+      "message": "Dear Sahyadri, Invoice BILL-910 of ₹3,391 is missing from our GSTR-2B for August 2026. Please file your GSTR-1 before the 11th to prevent credit blockage under Rule 88D."
+    },
+    {
+      "register_no": "—",
+      "portal_no": "INV-0056",
+      "supplier_name": "Pinnacle Marketing",
+      "supplier_gstin": "27AAECP4412M1ZR",
+      "tax": 10080.0,
+      "status": "portal_only",
+      "ai_conf": 0,
+      "similarity": 0.0,
+      "reason": "Late cross-period filing — eligible ITC carried forward",
+      "engine": "",
+      "phone": "",
+      "email": "",
+      "message": ""
+    },
+    {
+      "register_no": "—",
+      "portal_no": "QP/2026/031",
+      "supplier_name": "Quantum Print Solutions",
+      "supplier_gstin": "27AAFCQ8823N1ZT",
+      "tax": 14400.0,
+      "status": "portal_only",
+      "ai_conf": 0,
+      "similarity": 0.0,
+      "reason": "Late cross-period filing — eligible ITC carried forward",
+      "engine": "",
+      "phone": "",
+      "email": "",
+      "message": ""
+    }
+  ],
+  "cost": {
+    "engines": {
+      "Local matcher": 3
+    },
+    "tokens_in": 0,
+    "tokens_out": 0,
+    "usd": 0.0
+  }
+}

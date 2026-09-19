@@ -61,6 +61,7 @@ def persist_run(
     matches: list[Any],
     totals: dict[str, float],
     degraded: bool = False,
+    engine_usage: dict[str, int] | None = None,
 ) -> str | None:
     """Store one reconciliation run with its full classification ledger.
 
@@ -87,6 +88,8 @@ def persist_run(
         "reconciled_itc": {"N": f"{totals.get('exact', 0):.2f}"},
         "rescued_itc": {"N": f"{totals.get('ai', 0):.2f}"},
         "risk_itc": {"N": f"{totals.get('risk', 0):.2f}"},
+        "tokens_in": {"N": str(int(totals.get("tokens_in", 0)))},
+        "tokens_out": {"N": str(int(totals.get("tokens_out", 0)))},
         "degraded": {"BOOL": bool(degraded)},
         "results": {"S": json.dumps([
             {
@@ -102,6 +105,8 @@ def persist_run(
             for m in matches
         ], separators=(",", ":"))},
     }
+    if engine_usage:
+        item["engine_usage"] = {"S": json.dumps(engine_usage, separators=(",", ":"))}
     try:
         _client().put_item(TableName=name, Item=item)
     except Exception:  # noqa: BLE001 — persistence degrades, the demo must not
@@ -165,6 +170,11 @@ def recent_runs(period: str, limit: int = 5) -> list[dict[str, str]]:
             "risk": i.get("risk_itc", {}).get("N", "0"),
             "at": i.get("sk", {}).get("S", "").split("#")[0],
             "degraded": i.get("degraded", {}).get("BOOL", False),
+            "books": int(i.get("books_count", {}).get("N", "0")),
+            "portal": int(i.get("portal_count", {}).get("N", "0")),
+            "tokens_in": int(i.get("tokens_in", {}).get("N", "0")),
+            "tokens_out": int(i.get("tokens_out", {}).get("N", "0")),
+            "engines": json.loads(i.get("engine_usage", {}).get("S", "{}")),
         }
         for i in resp.get("Items", [])
     ]

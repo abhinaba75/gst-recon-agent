@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "note": "Shared knowledge base for the Recon-Agent assistant. The browser matches against it when the engine is unreachable; backend/assistant.py reads the same file, so there is exactly one set of answers. Placeholders in {{braces}} are filled from the reconciliation snapshot.",
+  "entries": [
+    {
+      "id": "first_steps",
+      "keywords": ["first", "start", "begin", "how do i use", "getting started", "setup", "kya karu", "shuru", "शुरू", "पहले", "कैसे"],
+      "en": "Start at the Get started section on this page. Load your purchase register and the GSTR-2B file for the same month, run the reconciliation, read the four figures, then send recovery notices to the vendors who have not filed. About ten minutes, and nothing is sent to anyone until you confirm it.",
+      "hi": "इस पेज के 'शुरू करें' अनुभाग से शुरू करें। उसी महीने का खरीद रजिस्टर और GSTR-2B फ़ाइल लोड करें, मिलान चलाएँ, चार आँकड़े पढ़ें, फिर जिन विक्रेताओं ने बिल जमा नहीं किया उन्हें रिकवरी नोटिस भेजें। लगभग दस मिनट, और जब तक आप पुष्टि नहीं करते किसी को कुछ नहीं भेजा जाता।"
+    },
+    {
+      "id": "what_is_itc",
+      "keywords": ["itc", "input tax credit", "क्रेडिट", "इनपुट", "what is credit", "tax credit"],
+      "en": "Input Tax Credit is the GST you already paid on your purchases. You subtract it from the GST you collected on sales, so you pay tax only on the value you added. The credit only becomes yours once the supplier reports the invoice to the government.",
+      "hi": "इनपुट टैक्स क्रेडिट वह GST है जो आपने खरीद पर चुकाया है। इसे बिक्री पर वसूले गए GST में से घटाया जाता है, इसलिए आप सिर्फ़ जोड़े गए मूल्य पर कर देते हैं। यह क्रेडिट तभी आपका बनता है जब विक्रेता उस बिल को सरकार को रिपोर्ट करे।"
+    },
+    {
+      "id": "rule_88d",
+      "keywords": ["88d", "88 d", "drc", "drc-01c", "notice", "नोटिस", "नोटीस", "insight notice"],
+      "en": "Rule 88D is the automatic discrepancy notice (Form DRC-01C). The system compares the credit you claimed against what the portal actually shows, and issues a notice when the two disagree. You then have 30 days to explain or correct it, and interest under Section 50(3) runs at 18% to 24% a year on wrongly claimed credit.",
+      "hi": "Rule 88D स्वतः भेजा जाने वाला अंतर नोटिस (Form DRC-01C) है। सिस्टम आपके दावे की तुलना पोर्टल से करता है और मेल न खाने पर नोटिस भेजता है। स्पष्टीकरण या सुधार के लिए 30 दिन मिलते हैं, और गलत दावे पर धारा 50(3) के तहत 18% से 24% वार्षिक ब्याज लगता है।"
+    },
+    {
+      "id": "section_16",
+      "keywords": ["16", "2(aa)", "16(2)(aa)", "धारा 16", "section 16", "supplier must file"],
+      "en": "Section 16(2)(aa) allows the credit only when the invoice appears in your GSTR-2B, which means the supplier has filed it. If the supplier has not filed, the credit is not yet allowed, even though you paid the tax and hold the bill.",
+      "hi": "धारा 16(2)(aa) क्रेडिट तभी देती है जब बिल आपकी GSTR-2B में दिखे, यानी विक्रेता ने उसे जमा किया हो। विक्रेता ने जमा न किया हो तो टैक्स चुकाने और बिल होने के बावजूद क्रेडिट अभी नहीं मिलता।"
+    },
+    {
+      "id": "credit_at_risk",
+      "keywords": ["risk", "at risk", "high risk", "defaulting", "not filed", "जोखिम", "खतरा", "नहीं जमा"],
+      "en": "Credit is at high risk when the bill is in your books but the supplier has not filed GSTR-1, so it never reached GSTR-2B. In this period that is {{risk}} across {{missing_count}} invoices. Those vendors collected the tax, so the fastest remedy is the recovery notice on this page.",
+      "hi": "क्रेडिट तब जोखिम में होता है जब बिल आपकी बही में है पर विक्रेता ने GSTR-1 जमा नहीं किया, इसलिए वह GSTR-2B तक नहीं पहुँचा। इस अवधि में यह {{risk}} है, {{missing_count}} बिलों में। इन विक्रेताओं ने टैक्स लिया है, इसलिए सबसे तेज़ उपाय इस पेज का रिकवरी नोटिस है।"
+    },
+    {
+      "id": "recovered_amount",
+      "keywords": ["how much", "recovered", "rescued", "total", "कितना", "बचाया", "कुल"],
+      "en": "For {{period}} the reconciliation covers {{bills}} purchase bills against {{portal}} GSTR-2B rows. {{rescued}} was recovered that a plain spreadsheet comparison had missed, {{total}} was invoiced in total, and a VLOOKUP-style pass would have written off {{write_off}}.",
+      "hi": "{{period}} के लिए मिलान में {{bills}} खरीद बिल और {{portal}} GSTR-2B पंक्तियाँ हैं। {{rescued}} वापस मिला जो सीधी स्प्रेडशीट तुलना से छूट गया था, कुल {{total}} का बिल था, और VLOOKUP जैसी तुलना {{write_off}} बेकार मान लेती।"
+    },
+    {
+      "id": "labels",
+      "keywords": ["label", "status", "mean", "matched", "portal-only", "unresolved", "लेबल", "मतलब", "स्थिति"],
+      "en": "Matched means the bill and the portal record agree exactly. Recovered by agent means the invoice number or vendor name differed slightly while tax and GSTIN agreed. Defaulting supplier means the vendor has not filed. Late filing means the portal shows the invoice now, so claim it this period. Unresolved means no safe match was found.",
+      "hi": "मिलान का मतलब है बिल और पोर्टल रिकॉर्ड बिल्कुल एक जैसे हैं। एजेंट ने बचाया का मतलब है बिल नंबर या विक्रेता का नाम थोड़ा अलग था पर टैक्स और GSTIN मिले। विक्रेता ने जमा नहीं किया का मतलब विक्रेता ने फाइल नहीं की। देर से फाइल का मतलब क्रेडिट अब दिख रहा है, इसी अवधि में क्लेम करें। अनसुलझा का मतलब सुरक्षित मिलान नहीं मिला।"
+    },
+    {
+      "id": "send_notice",
+      "keywords": ["send", "notice", "whatsapp", "email", "message", "vendor", "भेजें", "संदेश", "विक्रेता"],
+      "en": "Open the Recovery section, pick a vendor, and send the Rule 88D notice by WhatsApp or email. The agent uses the number or address in your register, and every attempt is written to the audit trail whether it succeeds or fails. If no messaging channel is configured, the message is prepared but not delivered, and the page says so.",
+      "hi": "वसूली अनुभाग खोलें, विक्रेता चुनें, और Rule 88D नोटिस WhatsApp या ईमेल से भेजें। एजेंट आपके रजिस्टर में दिया नंबर या पता इस्तेमाल करता है, और हर कोशिश सफल हो या न हो, ऑडिट रिकॉर्ड में दर्ज होती है। कोई मैसेजिंग चैनल सेट न हो तो संदेश तैयार होता है पर भेजा नहीं जाता, और पेज यह साफ़ बताता है।"
+    },
+    {
+      "id": "excel_vs_agent",
+      "keywords": ["excel", "vlookup", "spreadsheet", "why fail", "एक्सेल", "स्प्रेडशीट"],
+      "en": "A VLOOKUP compares cells literally, so 'INV/24-25/081' and 'INV-081' look like different invoices and the row returns #N/A. The agent instead confirms the GSTIN matches exactly and the tax agrees to the rupee first, and only then treats the invoice numbers as the same bill. It re-identifies rows; it never re-prices them.",
+      "hi": "VLOOKUP सेल की सीधी तुलना करता है, इसलिए 'INV/24-25/081' और 'INV-081' अलग बिल लगते हैं और पंक्ति #N/A लौटाती है। एजेंट पहले GSTIN का पूरा मिलान और टैक्स का रुपये तक मिलान जाँचता है, तभी बिल नंबर को एक मानता है। वह पंक्तियाँ पहचानता है; रकम नहीं बदलता।"
+    },
+    {
+      "id": "where_data",
+      "keywords": ["download", "gstr-2b", "portal", "file", "json", "कहाँ", "फ़ाइल", "डाउनलोड"],
+      "en": "The purchase register is your own book-keeping export. GSTR-2B comes from the GST portal: Returns Dashboard, choose the month, then Download GSTR-2B (JSON). Save it unopened, because the agent reads the portal's own format.",
+      "hi": "खरीद रजिस्टर आपकी अपनी बही का एक्सपोर्ट है। GSTR-2B GST पोर्टल से आता है: Returns Dashboard, महीना चुनें, फिर Download GSTR-2B (JSON)। फ़ाइल बिना खोले सेव करें, क्योंकि एजेंट पोर्टल का ही फ़ॉर्मैट पढ़ता है।"
+    },
+    {
+      "id": "data_safety",
+      "keywords": ["safe", "data", "privacy", "store", "security", "सुरक्षित", "डेटा", "गोपनीय"],
+      "en": "Your register and the GSTR-2B extract are processed to produce the figures on this page and archived privately for audit. Nothing is shared with a vendor unless you send a notice, and the notice contains only the invoice number, the tax amount and the Rule 88D reference.",
+      "hi": "आपका रजिस्टर और GSTR-2B निकाल इस पेज के आँकड़े बनाने के लिए प्रोसेस होते हैं और ऑडिट के लिए निजी तौर पर संग्रहित रहते हैं। जब तक आप नोटिस न भेजें, विक्रेता के साथ कुछ साझा नहीं होता, और नोटिस में सिर्फ़ बिल नंबर, टैक्स रकम और Rule 88D संदर्भ होता है।"
+    },
+    {
+      "id": "interest",
+      "keywords": ["interest", "24", "18", "50(3)", "penalty", "ब्याज", "जुर्माना"],
+      "en": "Interest on wrongly claimed credit runs at 18% a year for credit taken but not available, and up to 24% where the credit was claimed fraudulently, under Section 50(3). On a single disputed invoice the notice in this page's dialog shows that exposure before you send anything.",
+      "hi": "गलत दावे पर ब्याज धारा 50(3) के तहत लिए गए पर उपलब्ध न होने वाले क्रेडिट पर 18% वार्षिक, और धोखाधड़ी वाले दावे पर 24% तक लगता है। इस पेज के डायलॉग में किसी एक विवादित बिल पर वह जोखिम भेजने से पहले दिख जाता है।"
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f4f1e8" />
+    <meta
+      name="description"
+      content="Recon-Agent reconciles purchase bills against GSTR-2B, recovers the input tax credit a spreadsheet misses, and chases vendors who have not filed."
+    />
+    <title>Recon-Agent · GST credit recovery for Indian MSMEs</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+    />
+    <!-- Applied before first paint: no white flash on a night screen, and no
+         wrong-language flash for a reader who chose Hindi last visit. -->
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem("recon-theme");
+          var dark = saved
+            ? saved === "dark"
+            : window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var root = document.documentElement;
+          root.dataset.theme = dark ? "dark" : "light";
+          root.classList.toggle("dark", dark);
+          root.style.colorScheme = dark ? "dark" : "light";
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute("content", dark ? "#0a0c11" : "#f4f1e8");
+          var lang = localStorage.getItem("recon-lang");
+          if (lang) root.lang = lang;
+        } catch (e) {
+          /* storage blocked: the defaults above are already correct */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>
+      This dashboard needs JavaScript. The Python reconciliation engine it reports on
+      runs independently of the browser.
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

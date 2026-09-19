@@ -51,7 +51,7 @@ def main() -> int:
     expected_cols = [
         "invoice_no", "supplier_name", "supplier_gstin", "invoice_date",
         "taxable_value", "igst", "cgst", "sgst", "total_tax", "total_amount",
-        "vendor_phone",
+        "vendor_phone", "vendor_email",
     ]
     check("register columns", list(books.columns) == expected_cols, str(list(books.columns)))
     check("register rows == 12", len(books) == 12, f"{len(books)}")
@@ -116,14 +116,6 @@ def main() -> int:
     check("two blank GSTINs never corroborate (fail-closed)",
           bp_acme.status == "missing", bp_acme.status)
 
-    print("== Bedrock verdict parser ==")
-    ok = app._parse_verdict('{"match": "INV-081", "confidence": 94, "reason": "serial matches"}')
-    check("plain JSON verdict parsed", ok == {"match": "INV-081", "confidence": 94,
-                                              "reason": "serial matches"}, str(ok))
-    fenced = app._parse_verdict('Here you go:\n```json\n{"match": null, "confidence": 10}\n```')
-    check("fenced/prefixed verdict parsed", isinstance(fenced, dict) and fenced["match"] is None)
-    check("garbage verdict → None", app._parse_verdict("no json here at all") is None)
-
     print("== Bedrock degradation (unreachable → fallback, never crashes) ==")
     calls = {"n": 0}
 
@@ -159,6 +151,9 @@ def main() -> int:
           len(_persist_calls) >= 2 and _persist_calls[-2:] == [True, True],
           str(_persist_calls))
     b_healthy = books.copy()
+    # Cast first: the fixture column is int64 and a string assignment on it
+    # now raises a pandas FutureWarning (hard error in a future release).
+    b_healthy["vendor_phone"] = b_healthy["vendor_phone"].astype(object)
     b_healthy.loc[0, "vendor_phone"] = "+919999999999"  # fresh digest, same taxonomy
     app.run_recon_pipeline(b_healthy, portal)  # healthy local run
     check("healthy run persisted unflagged",
@@ -180,70 +175,49 @@ def main() -> int:
     check("original cached classification untouched",
           next(m for m in matches if "081" in m.register_no).status == "ai")
 
-    print("== Bedrock semantic pass (fake Converse client) ==")
+    print("== Cascade semantic pass (router over stubbed Converse) ==")
     # Books copy: original Sunrise row loses its GSTIN; the duplicate keeps a
-    # valid one and is a LITERAL match, so Tier 1 claims INV-24-25/075 and the
-    # model only ever sees corroborated, unclaimed candidates.
+    # valid one and is a LITERAL match, so Tier 1 claims INV/24-25/075 and the
+    # semantic tier only ever sees corroborated, unclaimed candidates.
     b2 = books.copy()
     b2.loc[0, "supplier_gstin"] = ""
     dup2 = pd.concat([b2, books.iloc[[0]]], ignore_index=True)
 
-    def _reply_with(match_fn):
-        class _Stub:
-            def __init__(self):
-                self.calls = 0
-                self.asked: list[str] = []
+    from backend.tools import smart_router as sr
+    asked: list[str] = []
+    model_calls = {"n": 0}
+    orig_conv = sr.call_bedrock_converse
 
-            def converse(self, **kwargs):
-                self.calls += 1
-                req = json.loads(kwargs["messages"][0]["content"][0]["text"])
-                self.asked.append(req["books_invoice"]["invoice_no"])
-                return {"output": {"message": {"content": [{
-                    "text": json.dumps(match_fn(req))}]}}}
+    def _match_all(model_id, prompt):
+        model_calls["n"] += 1
+        asked.append(prompt)
+        return "MATCH"
 
-        return _Stub()
-
-    echo = _reply_with(lambda req: {"match": req["portal_candidates"][0]["inum"],
-                                    "confidence": 91,
-                                    "reason": "trailing serial and trade name agree"})
-    orig_client = app._bedrock_client
-    app._bedrock_client = lambda: echo
+    sr.call_bedrock_converse = _match_all
     try:
         bm = app._bedrock_semantic_matcher(dup2, portal)
     finally:
-        app._bedrock_client = orig_client
+        sr.call_bedrock_converse = orig_conv
     bm_ai = [m for m in bm if m.status == "ai"]
-    check("consulted only for corroborated candidates (3 rows)", echo.calls == 3,
-          f"{echo.calls} calls: {echo.asked}")
-    check("blank-GSTIN row never sent to the model",
-          not any("075" in n for n in echo.asked), str(echo.asked))
-    check("echo replies → exactly the 3 typo rows rescued", len(bm_ai) == 3,
+    check("exactly 3 corroborated candidates rescued", len(bm_ai) == 3,
           str([(m.register_no, m.portal_no) for m in bm_ai]))
     if len(bm_ai) == 3:
-        check("each verdict mapped to its own portal row",
+        check("each claim maps to its own portal row",
               {m.portal_no for m in bm_ai} == {"INV-081", "TAX-2026-019", "INV-2026-907"},
               str({m.portal_no for m in bm_ai}))
-        check("confidence parsed and clamped (91)",
-              all(m.ai_conf == 91 for m in bm_ai), str([m.ai_conf for m in bm_ai]))
         check("blank-GSTIN Sunrise stays missing (fail-closed)",
               any(m.status == "missing" and "075" in m.register_no for m in bm))
     check("conservation: INV/24-25/075 claimed exactly once",
           sum(1 for m in bm if m.status in ("exact", "ai")
               and m.portal_no == "INV/24-25/075") == 1)
-
-    liar = _reply_with(lambda req: {"match": "INV/24-25/075", "confidence": 99,
-                                    "reason": "model insists"})
-    app._bedrock_client = lambda: liar
-    try:
-        lm = app._bedrock_semantic_matcher(books, portal)
-    finally:
-        app._bedrock_client = orig_client
-    check("model cannot claim an already-matched portal row",
-          not any(m.status == "ai" for m in lm),
-          str([(m.register_no, m.portal_no) for m in lm if m.status == "ai"]))
-    check("conservation holds against a lying model",
-          sum(1 for m in lm if m.status in ("exact", "ai")
-              and m.portal_no == "INV/24-25/075") == 1)
+    check("blank-GSTIN row never reaches any model prompt",
+          all("075" not in p for p in asked), f"{model_calls['n']} model calls")
+    check("cost cascade: only the abbreviation vendor needed a paid engine",
+          model_calls["n"] == 1
+          and {m.engine for m in bm_ai} == {"RapidFuzz", "Nova Micro"},
+          str({(m.engine, m.register_no) for m in bm_ai}))
+    check("engine attribution only on semantic claims",
+          all(not m.engine for m in bm if m.status != "ai"))
 
     print("== WhatsApp template guards ==")
     empty = app.Match("X", "—", "", "27AA", 100.0, "missing")

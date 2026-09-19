@@ -62,6 +62,27 @@ def main() -> int:
     check("comms agent logged", any("[A2A]" in line for line in at.session_state["log"]),
           "log tail: " + str(at.session_state["log"][-1:]))
 
+    print("== Hindi mode (bilingual layer) ==")
+    at_hi = AppTest.from_file(str(ROOT / "frontend" / "app.py"), default_timeout=60)
+    at_hi.session_state["lang_choice"] = "हिंदी"
+    at_hi.run()
+    check("no exception in Hindi mode", not at_hi.exception,
+          str(at_hi.exception)[:200] if at_hi.exception else "")
+    check("language toggle reflects Hindi",
+          at_hi.radio and at_hi.radio[0].value == "हिंदी",
+          str([r.value for r in at_hi.radio]))
+    body = " ".join(m.value for m in at_hi.markdown)
+    check("hero copy is Hindi", "कारोबारों" in body, body[:120])
+    check("plain-language key present in both languages",
+          "आसान शब्दों में" in body and "In plain words" not in body, body[:200])
+    check("KPI labels stay stable across languages",
+          [m.label for m in at_hi.metric[:4]] ==
+          ["Total Invoiced ITC", "Reconciled ITC (Exact)",
+           "Rescued ITC (AI)", "ITC at High Risk"],
+          str([m.label for m in at_hi.metric[:4]]))
+    check("alternate-language line carries a lang attribute",
+          "lang='en'" in body or 'lang="en"' in body, body[:200])
+
     print()
     if failures:
         print(f"RESULT: {len(failures)} failure(s): {failures}")
