@@ -198,6 +198,150 @@ def main() -> int:
         for k in ("TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_WHATSAPP_FROM"):
             os.environ.pop(k, None)
 
+    print("== Comms agent: meta mode via stubbed Graph API ==")
+    # Meta (WhatsApp Cloud API) takes precedence over Twilio when both are set.
+    os.environ["WHATSAPP_ACCESS_TOKEN"] = "eaag-token"
+    os.environ["WHATSAPP_PHONE_NUMBER_ID"] = "1234567890"
+    os.environ["TWILIO_ACCOUNT_SID"] = "ACdup"
+    os.environ["TWILIO_AUTH_TOKEN"] = "tok"
+    os.environ["TWILIO_WHATSAPP_FROM"] = "whatsapp:+14155238886"
+    check("meta takes precedence when both providers are configured",
+          ca.mode() == "meta", ca.mode())
+    os.environ.pop("TWILIO_ACCOUNT_SID", None)
+    os.environ.pop("TWILIO_AUTH_TOKEN", None)
+    os.environ.pop("TWILIO_WHATSAPP_FROM", None)
+
+    posts: list[dict] = []
+
+    class _Resp:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"messages": [{"id": "wamid.TEST123"}]}
+
+    def _fake_post(url, headers=None, json=None, timeout=None):
+        posts.append({"url": url, "headers": headers, "json": json,
+                      "timeout": timeout})
+        return _Resp()
+
+    import requests as _requests
+    orig_post = _requests.post
+    _requests.post = _fake_post
+    ca.db.record_dispatch = _capture_dispatch
+    try:
+        r = ca.send_recovery_notice(period="August 2026", invoice_no="X-5",
+                                    supplier="Vendor", phone="+919820177890",
+                                    message="Hello")
+        check("meta mode sends via Graph API",
+              r["ok"] is True and r["mode"] == "meta" and posts, str(r))
+        check("graph url carries phone number id and a version",
+              posts[0]["url"].startswith("https://graph.facebook.com/v")
+              and "1234567890/messages" in posts[0]["url"], posts[0]["url"])
+        check("bearer token used",
+              posts[0]["headers"]["Authorization"] == "Bearer eaag-token")
+        p = posts[0]["json"]
+        check("freeform payload targets the bare E.164 number",
+              p["messaging_product"] == "whatsapp" and p["to"] == "+919820177890"
+              and p["type"] == "text" and p["text"]["body"] == "Hello", str(p))
+        check("provider wamid recorded", r["message_id"] == "wamid.TEST123")
+
+        os.environ["WHATSAPP_TEMPLATE_NAME"] = "recon_rule88d_recovery"
+        posts.clear()
+        ca.send_recovery_notice(period="August 2026", invoice_no="X-6",
+                                supplier="Vendor", phone="+919820177890",
+                                message="Hello 88D")
+        p = posts[0]["json"]
+        check("template send wraps the notice in the body parameter",
+              p["type"] == "template"
+              and p["template"]["name"] == "recon_rule88d_recovery"
+              and p["template"]["components"][0]["parameters"][0]["text"] == "Hello 88D",
+              str(p))
+        os.environ.pop("WHATSAPP_TEMPLATE_NAME", None)
+
+        def _boom_post(*a, **k):
+            raise RuntimeError("graph api down")
+
+        _requests.post = _boom_post
+        r = ca.send_recovery_notice(period="August 2026", invoice_no="X-7",
+                                    supplier="Vendor", phone="+919820177890",
+                                    message="Hello")
+        check("meta provider failure → ok=False, audited (never raises)",
+              r["ok"] is False and "RuntimeError" in r["detail"]
+              and dispatches[-1][1].get("error"), str(r))
+    finally:
+        _requests.post = orig_post
+        ca.db.record_dispatch = orig_record
+        for k in ("WHATSAPP_ACCESS_TOKEN", "WHATSAPP_PHONE_NUMBER_ID",
+                  "WHATSAPP_TEMPLATE_NAME"):
+            os.environ.pop(k, None)
+
+    print("== Comms agent: email mode (SendGrid via stubbed HTTP) ==")
+    os.environ["SENDGRID_API_KEY"] = "SG.test"
+    os.environ["RECOVERY_EMAIL_FROM"] = "Acme Recovery <ops@acme.in>"
+    posts.clear()
+
+    class _SgResp:
+        status_code = 202
+        headers = {"X-Message-Id": "msg-abc123"}
+
+        def raise_for_status(self):
+            pass
+
+    def _sg_post(url, headers=None, json=None, timeout=None):
+        posts.append({"url": url, "headers": headers, "json": json})
+        return _SgResp()
+
+    _requests.post = _sg_post
+    ca.db.record_dispatch = _capture_dispatch
+    check("email mode active with sendgrid + from", ca.mode() == "email", ca.mode())
+    try:
+        r = ca.send_recovery_notice(period="August 2026", invoice_no="X-8",
+                                    supplier="Vendor", phone=None,
+                                    email="accounts@vertexindustrial.in",
+                                    message="Hello by mail")
+        check("email mode delivers via sendgrid",
+              r["ok"] is True and r["mode"] == "email" and posts, str(r))
+        check("sendgrid request carries key, subject and recipient",
+              posts[0]["headers"]["Authorization"] == "Bearer SG.test"
+              and posts[0]["json"]["personalizations"][0]["to"] == [{"email": "accounts@vertexindustrial.in"}]
+              and posts[0]["json"]["from"]["email"] == "ops@acme.in"
+              and posts[0]["json"]["content"][0]["value"] == "Hello by mail",
+              str(posts[0]["json"]))
+        check("provider message id from X-Message-Id header",
+              r["message_id"] == "msg-abc123", str(r))
+        check("audit row records email mode",
+              dispatches[-1][0][4] == "email" and not dispatches[-1][1].get("error"),
+              str(dispatches[-1]))
+        r = ca.send_recovery_notice(period="August 2026", invoice_no="X-9",
+                                    supplier="Vendor", phone=None,
+                                    email="not-an-email",
+                                    message="Hello by mail")
+        check("junk email fails closed", r["ok"] is False and "not valid" in r["detail"], str(r))
+        r = ca.send_recovery_notice(period="August 2026", invoice_no="X-10",
+                                    supplier="Vendor", phone=None, email=None,
+                                    message="Hello by mail")
+        check("missing email fails closed", r["ok"] is False
+              and "no vendor email" in r["detail"], str(r))
+
+        def _sg_boom(*a, **k):
+            raise RuntimeError("sendgrid down")
+
+        _requests.post = _sg_boom
+        r = ca.send_recovery_notice(period="August 2026", invoice_no="X-11",
+                                    supplier="Vendor", phone=None,
+                                    email="accounts@vertexindustrial.in",
+                                    message="Hello by mail")
+        check("sendgrid failure → ok=False, audited (never raises)",
+              r["ok"] is False and "RuntimeError" in r["detail"]
+              and dispatches[-1][1].get("error"), str(r))
+    finally:
+        os.environ.pop("SENDGRID_API_KEY", None)
+        os.environ.pop("RECOVERY_EMAIL_FROM", None)
+        ca.db.record_dispatch = orig_record
+
     print("== GSTR-2B parser: real GSTN download schema ==")
     fixture = json.loads((ROOT / "fixtures" / "sample_gstr2b.json").read_text())
     frows = gstr2b.parse_gstr2b(fixture)

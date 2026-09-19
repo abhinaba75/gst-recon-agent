@@ -61,6 +61,7 @@ def build_purchase_register() -> pd.DataFrame:
         *,
         intra: bool,
         vendor_phone: str,
+        vendor_email: str,
     ) -> None:
         tax = _slab(taxable_value, rate, intra=intra)
         total_tax = tax["igst"] + tax["cgst"] + tax["sgst"]
@@ -77,6 +78,7 @@ def build_purchase_register() -> pd.DataFrame:
                 "total_tax": _round_rupees(total_tax),
                 "total_amount": float(taxable_value) + _round_rupees(total_tax),
                 "vendor_phone": vendor_phone,
+                "vendor_email": vendor_email,
             }
         )
 
@@ -84,35 +86,47 @@ def build_purchase_register() -> pd.DataFrame:
     # Karnataka recipient (29): local 29-vendors are intra-state (CGST+SGST),
     # 27/36-vendors are inter-state (IGST) — POS is always the recipient state.
     add("INV/24-25/075", "Sunrise Polymers Pvt Ltd", "27AAECS4821K1ZP",
-        "2026-08-02", 84_500.0, 18.0, intra=False, vendor_phone="+919822011456")
+        "2026-08-02", 84_500.0, 18.0, intra=False, vendor_phone="+919822011456",
+        vendor_email="accounts@sunrisepolymers.in")
     add("TAX/2026/014", "Bharat Office Supplies", "29AAFCB9032L1ZQ",
-        "2026-08-04", 32_000.0, 18.0, intra=True, vendor_phone="+919845023347")
+        "2026-08-04", 32_000.0, 18.0, intra=True, vendor_phone="+919845023347",
+        vendor_email="accounts@bharatofficesupplies.in")
     add("INV/24-25/078", "Deccan Chemicals LLP", "36AAGCD1156N1ZS",
-        "2026-08-06", 61_200.0, 18.0, intra=False, vendor_phone="+919701133254")
+        "2026-08-06", 61_200.0, 18.0, intra=False, vendor_phone="+919701133254",
+        vendor_email="accounts@deccanchemicals.in")
     add("BILL-902", "Kaveri Packaging", "29AAHCK2278P1ZT",
-        "2026-08-08", 25_400.0, 12.0, intra=True, vendor_phone="+919886244510")
+        "2026-08-08", 25_400.0, 12.0, intra=True, vendor_phone="+919886244510",
+        vendor_email="accounts@kaveripackaging.in")
     add("INV/24-25/083", "Trident Facility Services", "29AAJCT5534Q1ZU",
-        "2026-08-11", 48_900.0, 18.0, intra=True, vendor_phone="+919920355628")
+        "2026-08-11", 48_900.0, 18.0, intra=True, vendor_phone="+919920355628",
+        vendor_email="accounts@tridentfacilities.in")
     add("INV/24-25/085", "Orion Electronics", "27AAKCO6645R1ZV",
-        "2026-08-13", 74_300.0, 18.0, intra=False, vendor_phone="+919833366741")
+        "2026-08-13", 74_300.0, 18.0, intra=False, vendor_phone="+919833366741",
+        vendor_email="accounts@orionelectronics.in")
 
     # ── Group 2 :: Typo / semantic matches (3 invoices) ───────────────────
     # Portal echoes a mangled number; taxes and GSTIN agree exactly.
     add("INV/24-25/081", "Acme Corporation Pvt Ltd", "27AABCA1234F1Z5",
-        "2026-08-15", 100_000.0, 18.0, intra=False, vendor_phone="+919876543210")
+        "2026-08-15", 100_000.0, 18.0, intra=False, vendor_phone="+919876543210",
+        vendor_email="accounts@acmecorp.in")
     add("TAX/2026/019", "Zenith Logistics Pvt Ltd", "29AABCL5678G1Z3",
-        "2026-08-18", 45_000.0, 5.0, intra=True, vendor_phone="+919930588774")
+        "2026-08-18", 45_000.0, 5.0, intra=True, vendor_phone="+919930588774",
+        vendor_email="accounts@zenithlogistics.in")
     add("BILL-907", "Nimbus Cloud Services", "27AACCN9901H1Z9",
-        "2026-08-20", 58_000.0, 18.0, intra=False, vendor_phone="+919702599806")
+        "2026-08-20", 58_000.0, 18.0, intra=False, vendor_phone="+919702599806",
+        vendor_email="accounts@nimbuscloud.in")
 
     # ── Group 3 :: Defaulting suppliers (in books, ABSENT from 2B) ────────
     # Inter-state (27-suppliers) → IGST under Sec 5 of IGST Act.
     add("INV/24-25/088", "Vertex Industrial Supplies", "27AAECV3345J1ZN",
-        "2026-08-09", 82_500.0, 18.0, intra=False, vendor_phone="+919820177890")
+        "2026-08-09", 82_500.0, 18.0, intra=False, vendor_phone="+919820177890",
+        vendor_email="accounts@vertexindustrial.in")
     add("TAX/2026/022", "Marathon Freight Movers", "27AAFCM7789K1ZP",
-        "2026-08-21", 36_600.0, 5.0, intra=False, vendor_phone="+919845288925")
+        "2026-08-21", 36_600.0, 5.0, intra=False, vendor_phone="+919845288925",
+        vendor_email="accounts@marathonfreight.in")
     add("BILL-910", "Sahyadri Hardware Mart", "27AAGCS1102L1ZQ",
-        "2026-08-23", 18_840.0, 18.0, intra=False, vendor_phone="+919762399462")
+        "2026-08-23", 18_840.0, 18.0, intra=False, vendor_phone="+919762399462",
+        vendor_email="accounts@sahyadrihardware.in")
 
     # ── Group 4 :: Portal-only entries are NOT in the books here; they live
     # only in sample_gstr2b.json (late filings of July invoices).

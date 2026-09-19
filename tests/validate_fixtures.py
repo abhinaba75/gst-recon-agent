@@ -51,7 +51,7 @@ def main() -> int:
     expected_cols = [
         "invoice_no", "supplier_name", "supplier_gstin", "invoice_date",
         "taxable_value", "igst", "cgst", "sgst", "total_tax", "total_amount",
-        "vendor_phone",
+        "vendor_phone", "vendor_email",
     ]
     check("register columns", list(books.columns) == expected_cols, str(list(books.columns)))
     check("register rows == 12", len(books) == 12, f"{len(books)}")
@@ -151,6 +151,9 @@ def main() -> int:
           len(_persist_calls) >= 2 and _persist_calls[-2:] == [True, True],
           str(_persist_calls))
     b_healthy = books.copy()
+    # Cast first: the fixture column is int64 and a string assignment on it
+    # now raises a pandas FutureWarning (hard error in a future release).
+    b_healthy["vendor_phone"] = b_healthy["vendor_phone"].astype(object)
     b_healthy.loc[0, "vendor_phone"] = "+919999999999"  # fresh digest, same taxonomy
     app.run_recon_pipeline(b_healthy, portal)  # healthy local run
     check("healthy run persisted unflagged",
