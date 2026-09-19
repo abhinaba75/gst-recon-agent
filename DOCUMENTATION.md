@@ -341,10 +341,27 @@ doubles as the **behavioural oracle** the live tool must match or beat on these 
 The visual language is **"the compliance war room"** — built from the subject matter, not
 from a generic dashboard template:
 
-- **Palette** (`.streamlit/config.toml` + injected CSS): ledger navy surfaces (`#131A29` app,
-  `#1B2537` metric panels, `#0F1524` sidebar, `#0E1524` code), paper-toned text `#E8E4D8`,
-  **brass `#C9A227`** as the primary accent (money, not neon), stamp green `#30A46C` for
-  recovered ITC, stamp red `#E5484D` for exposure and `#N/A`.
+- **Palette** (`.streamlit/config.toml` + injected CSS): ledger navy surfaces (`#101725` app,
+  `#1B2537` metric cards, `#0D1420` sidebar, `#0E1524` code), paper-toned text `#F1EEE6`,
+  **brass `#D8B94E`** as the primary accent (money, not neon), stamp green `#45C486` for
+  recovered ITC, stamp red `#F2555A` for exposure and `#N/A`. Every value is picked to clear
+  **WCAG AA** on its surface — the old `#30A46C`/`#E5484D` pair sat at ~4.1:1 on the card,
+  which is not enough for small text.
+- **Design system**: one `_CSS` constant carries a **shadcn-style token layer**
+  (`--recon-bg/-card/-border/-text/-muted/-brass/-radius/-ease`) rebuilt as hand-written CSS
+  over Streamlit's own markup — a component library cannot be installed into a Streamlit app,
+  so the tokens are reproduced rather than imported. Cards are built as shell + core
+  (hairline border, inset top highlight, soft shadow, single 14px radius); motion uses
+  explicit properties with one spring curve, never `transition: all`.
+- **Built for the actual audience** — a shop owner or accountant in a small town on a phone:
+  17px base type (18.5px under 768px), 48px minimum touch targets and full-width actions on
+  phones, a skip-to-content link, visible `:focus-visible` rings on every control, colour
+  never the only signal (each status carries words), `prefers-reduced-motion` honoured, and
+  tabular figures throughout so amounts line up.
+- **Bilingual by construction**: `I18N` + `heading()` render the active language large with
+  the other language beneath it, and the sidebar opens with a **भाषा / Language** toggle
+  (English / हिंदी). Key figures keep stable English labels in both languages so tests and
+  exports stay comparable; adding a language means adding one element per tuple.
 - **Type**: Source Serif 4 for headings (the register of official Indian tax documents),
   IBM Plex Sans for UI copy, IBM Plex Mono for every figure, invoice number and status.
 - **The signature element**: statuses render as **rubber-stamp chips** — double-ring
@@ -353,12 +370,17 @@ from a generic dashboard template:
   `DEFAULTING SUPPLIER`, `PORTAL-ONLY · LATE FILING`.
 - **Amounts read like Indian invoices**: `inr()` groups digits the lakh/crore way
   (₹1,07,971), not the Western way (₹107,971).
-- Metric panels are square-cornered (2px) and quiet, so the stamps carry the colour.
+- Metric cards are quiet rounded panels that lift subtly on hover, so the stamps carry the
+  colour.
 
 ### 7.1 Header & quickstart
-- Title: **Recon-Agent** (serif), subtitle *Autonomous GST ITC reconciliation for Indian MSMEs*.
-- One-line problem hook: ₹45,000 crore unclaimed; Section 16(2)(aa) blocks credit unless the
-  supplier files.
+- An eyebrow badge (`🧾 AWS First Commit · WeMakeDevs`) and a faint radial glow open the page;
+  a skip link is the first focusable element for keyboard users.
+- Title: **Recon-Agent** (serif), subtitle *Autonomous GST credit reconciliation for Indian
+  small businesses* with the हिंदी line directly beneath it.
+- Plain-language hook in a callout: ₹45,000 crore goes unclaimed each year because a
+  spreadsheet cannot see past a small difference in an invoice number — what the agent
+  matches, recovers and chases, in one paragraph, jargon explained.
 - **`Load demo fixtures`** button (brass primary) — clears any uploads/state so judges get
   the canonical demo in one click, no file browsing.
 
@@ -450,12 +472,25 @@ confidences within 0–100; WhatsApp template contains *Rule 88D / GSTR-1 / Augu
 (₹1,07,971 / ₹57,210 / ₹30,690 / ₹20,071); ≥2 dataframes; the three `wa-*` buttons; and after a
 click: no exception, `wa_modal` set in session state, `[A2A]` delegation in the log.
 
-**Current status: 111 checks passing across four suites** — 43 fixture/pipeline assertions,
-16 tiered-router tests (`tests/test_smart_router.py`), 41 backend tests
-(`tests/test_backend.py`: persistence guards, stubbed DynamoDB/S3, comms-agent modes, audit
-rows, the real-schema GSTR-2B parser, and the S3 archive), and 11 headless UI checks. Test
-runs never write to deployed AWS resources (persistence is stubbed and call-counted in the
-suites; CI fences the credentials off entirely).
+**Current status: 170 checks passing across five suites** — 43 fixture/pipeline assertions,
+16 tiered-router tests (`tests/test_smart_router.py`), 57 backend tests
+(`tests/test_backend.py`: persistence guards, stubbed DynamoDB/S3, the comms-agent provider
+ladder — Twilio, Meta Cloud API and email, audit rows, the real-schema GSTR-2B parser, and
+the S3 archive), 17 headless UI checks (render, KPIs, the dispatch dialog flow, and
+Hindi-mode rendering through the bilingual layer), and 37 API checks
+(`tests/test_api.py`: health, the snapshot contract, request mapping, failure pass-through,
+the assistant — guide answers, placeholder rendering from the live snapshot, an admitted
+"not in the guide", and a configured model that fails degrading to the guide with the error
+reported rather than hidden — and sign-in: the demo pair accepted, the same refusal message
+for a wrong email and a wrong password, an opaque token that is never the password, a live
+token resolving to its user, logout dropping it, and configured credentials switching the
+build out of demo mode). Two web checks run in CI as well: `web/scripts/check-i18n.ts` proves
+all 23 offered languages cover the tier they advertise with no stray keys, and
+`web/scripts/smoke-render.tsx` renders the real component trees — the login page and the
+signed-in workspace — to static markup, which is how a missing provider or a bad import gets
+caught when `tsc` and the bundler both accept it.
+Test runs never write to deployed AWS resources (persistence is stubbed and call-counted in
+the suites; CI fences the credentials off entirely).
 
 Hardened after pre-merge review: model verdicts must be a bare `MATCH` ("NO MATCH" and
 "NOT A MATCH" degrade to UNRECONCILED instead of reading as matches); the pipeline cache
@@ -487,12 +522,159 @@ streamlit run frontend/app.py                  # → http://localhost:8501
 Optional: `run.sh` wraps the same launch (`PORT` env override, binds `0.0.0.0`):
 `sh ./run.sh`.
 
-### 10.2 Freebuff Cloud preview (already configured)
+### 10.2 The web frontend (React + TypeScript)
+
+The product site lives in `web/`: React 19, TypeScript in strict mode, Vite 7 and
+Tailwind v4, with tokens declared once as CSS custom properties. It renders
+`web/src/data/snapshot.json`, which `scripts/export_snapshot.py` writes from a real
+run of the Python engine — so the page can never disagree with the tests.
+
+```bash
+.venv/bin/python scripts/export_snapshot.py    # engine → snapshot (re-run after changes)
+sh ./run_web.sh                                # API (:8000) + Vite SPA on $PORT
+cd web && bun run typecheck && bun run build    # gate + static build → web/dist
+```
+
+`api/main.py` (FastAPI) is the only bridge: `/api/health`, `/api/snapshot`,
+`/api/runs`, `POST /api/dispatch` (which calls the very same
+`backend/subagents/comms_agent.py` the console uses) and `POST /api/assistant`.
+Without the API the SPA still renders the snapshot, answers assistant questions
+from the shared guide, and states in the dispatch dialog that nothing was sent.
+
+**Day/night.** Both themes are one token set with two value blocks: `@theme` holds
+the day palette, `html[data-theme="dark"]` re-pitches the same roles for a night
+screen. The choice is persisted, defaults to the device preference, and is applied
+by an inline script in `index.html` **before first paint** so a night reader never
+sees a white flash. A `role="status"` line announces the change, because an icon
+cannot say it.
+
+**Languages.** `web/src/lib/locales/` carries all 22 Eighth Schedule languages plus
+English. Each declares a coverage tier that `bun run check:i18n` enforces: `hi` is
+*complete* (every key, including the long explanations) and the other 21 are
+*interface* — navigation, section titles, the four figures, status labels, table
+columns, the assistant and the actions, with English prose and an honest on-page
+note meanwhile. Missing keys fall back to English rather than to a key name.
+Script direction is per-locale, so Urdu, Sindhi and Kashmiri render RTL, and the
+choice survives a reload.
+
+**The assistant.** `backend/assistant.py` answers from a Bedrock Converse call only
+when `RECON_ASSISTANT_MODEL` names a model the account can invoke; otherwise — and
+whenever that call fails — it answers from `web/src/data/guide.json`, the same file
+the browser matches against when the engine is unreachable. So there is one set of
+answers, not two that drift, the reply always names its source ("Answered by the
+language model" vs "Answered from the built-in guide"), a failed model call is
+reported with its error instead of being disguised, and the assistant never invents
+a figure, a GSTIN or a deadline. Guide answers quote the page's own figures —
+`{{rescued}}` renders as the engine's ₹30,690, not a hard-coded number.
+
+**Mobile.** The ledger is a real table in the DOM and becomes a labelled card per
+invoice below 760 px, so the tabular semantics survive for assistive technology;
+the assistant is a docked panel on a desktop and a full sheet on a phone; the
+dialog is a scrollable sheet capped at `92dvh`; language and theme controls keep
+44 px targets; the nav scrolls horizontally rather than wrapping into the content.
+
+**shadcn/ui, for real.** `components.json` is committed and the components are
+vendored through the CLI (`table`, `spinner`, `select`, `card`, `badge`, `chart`,
+`sidebar`, `field` and the rest of the `dashboard-01` and `login-04` blocks), not
+reimplemented. Because shadcn names its colours semantically, this project's palette
+*is* the shadcn palette: the raw values live in `:root` / `.dark` and `@theme inline`
+turns them into utilities, so a vendored component arrives already wearing the brand
+instead of a second neutral theme. `theme.ts` sets both `data-theme` and the `.dark`
+class for exactly that reason.
+
+What changed in the product as a result: the page sits in the dashboard shell
+(`SidebarProvider` + `AppSidebar` + `SidebarInset` + `SiteHeader`, collapsible, with
+the mobile sheet), the four figures are section cards with badges carrying real facts
+rather than invented percentages, the ledger is the shadcn `Table` (still a table in
+the DOM, still a labelled card per row on a phone), dispatch and the assistant use the
+`Spinner`, the language picker is the `Select`, and a `chart-credit` card draws the
+period's credit per bill in the shadcn chart wrapper.
+
+**Sign-in.** `login-04` became the gate in front of the workspace, over a dot-matrix
+WebGL backdrop (`dot-canvas.tsx`, loaded lazily and skipped entirely under
+`prefers-reduced-motion`). The engine verifies every credential and hands back an
+opaque token the browser keeps in `sessionStorage`; it revalidates that token on load,
+so an engine restart signs you out rather than showing a workspace the server has
+forgotten. Three ways in, all of them real:
+
+* **A password account** created on the deployment — `POST /api/auth/register`,
+  verified by `backend/users.py`. Passwords are hashed with `hashlib.scrypt` and a
+  per-user salt and compared in constant time; a hash never leaves that module.
+  Accounts live in DynamoDB when `RECON_USERS_TABLE` is set, otherwise in a JSON file
+  (`RECON_USERS_FILE`, default `.recon-users.json`, gitignored). `RECON_ALLOW_SIGNUP=0`
+  closes registration.
+* **The operator account** — `RECON_UI_EMAIL` / `RECON_UI_PASSWORD`, checked in
+  constant time, which is the right shape for one MSME: point it at their login.
+* **A social identity** — `backend/oauth.py`, authorization-code flow, one button per
+  provider that is actually configured. `GET /api/auth/options` reports which those
+  are and names the environment variables a missing one needs, so the page can never
+  show a button that would fail. Google: `RECON_GOOGLE_CLIENT_ID` /
+  `RECON_GOOGLE_CLIENT_SECRET`. GitHub: `RECON_GITHUB_CLIENT_ID` /
+  `RECON_GITHUB_CLIENT_SECRET`. Apple: `RECON_APPLE_CLIENT_ID` plus either a
+  ready-made `RECON_APPLE_CLIENT_SECRET` or `RECON_APPLE_TEAM_ID`,
+  `RECON_APPLE_KEY_ID` and the `.p8` key (`RECON_APPLE_KEY_PATH`), from which the
+  short-lived ES256 client secret Apple insists on is signed here — that is the one
+  place `pyjwt[crypto]` is used.
+* **A hosted sign-in (Clerk)** — the one option whose settings live entirely in the
+  provider's dashboard: accounts, email verification, password reset, social
+  connections, attack protection. `backend/clerk.py` is deliberately the smallest
+  honest bridge. With `RECON_CLERK_ISSUER`, `RECON_CLERK_SECRET_KEY` and
+  `RECON_CLERK_PUBLISHABLE_KEY` set, the card mounts Clerk's own hosted `<SignIn />`
+  (lazy-loaded — an unconfigured deployment never downloads the SDK) themed from the
+  same CSS variables the rest of the page uses. The browser hands the session token
+  it receives to `POST /api/auth/clerk`, which verifies the RS256 signature against
+  Clerk's JWKS (cached an hour, so key rotation is picked up), checks `iss` against
+  the configured Frontend API URL and `azp` against `RECON_CLERK_ALLOWED_ORIGINS`,
+  then reads email and name from Clerk's Backend API with the secret key — the
+  browser never decides who it is. The account that lands in the store is the same
+  record every other sign-in creates, so a Clerk identity and a password account
+  with the same address are one workspace. A Backend API outage degrades to the
+  token's standard email claim rather than failing the sign-in.
+
+The state value is random, single-use and expires, which is what stops a login-CSRF; the
+token exchange happens server-side with the client secret; and a callback never puts a
+session token in a URL, only a one-time code the page redeems once with
+`POST /api/auth/exchange`. Apple posts its answer back rather than appending it, which
+is why there is a `POST` callback as well as a `GET`, and why its identity is read from
+the `id_token` — a value that arrived over TLS from Apple's own token endpoint in
+response to a request this process authenticated. Every claim acted on is checked
+against something the deployment chose: `aud` against its client id, `iss` against
+Apple's issuer, `exp` against the clock, and `nonce` against the value generated when
+the attempt began.
+
+A deployment whose page is served through a proxy that rewrites `Host` — this project's
+Vite dev server sets `changeOrigin` — must list the address the page is actually on in
+`RECON_ALLOWED_ORIGINS`, or the engine answers on its own address and the callback
+never reaches the page. The origin the sign-in started from is remembered with the
+state and is what the browser is sent home to, so a rewritten `Host` cannot strand it.
+
+Two modes are reported honestly — `configured` when `RECON_UI_EMAIL` /
+`RECON_UI_PASSWORD` are set, `demo` otherwise, in which case the page shows the demo
+credentials it is actually accepting (`demo@recon-agent.in` / `demo-88d`) and the demo
+pair stops working the moment a real account exists. With no engine at all those demo
+credentials still open a session, but it is marked `offline` and the workspace says so
+in a red banner: nothing was verified, and no notice will be delivered. A temporary
+"Skip sign-in (demo)" button does the same thing on purpose, for reviewers, and says
+so on the page.
+
+**Weight.** Recharts was 106 KB gzipped on its own, so the chart and the assistant are
+lazily imported: the first paint is about 158 KB gzipped of JS plus 18 KB of CSS, and
+the chart arrives only when the numbers section renders. Both fall back to a skeleton
+and `null` respectively, so the page is usable before they load.
+
+Deliberate frontend choices otherwise: one accent colour and hairline borders
+instead of decorative shadows; `Intl` for Indian digit grouping; a native `<dialog>`
+for focus trapping and Esc rather than a hand-rolled overlay; `aria-sort` on the
+sortable column, `aria-pressed` on the toggles, `aria-live` on dispatch, assistant
+and filter results; a skip link and stable heading order; money and status never
+signalled by colour alone; `prefers-reduced-motion` respected.
+
+### 10.3 Freebuff Cloud preview (already configured)
 
 | Setting | Command |
 |---|---|
-| Install | `python3 -m venv .venv && .venv/bin/pip install -q -r requirements.txt && .venv/bin/python fixtures/generate_mock_data.py` |
-| Preview | `sh ./run.sh` on port **8501** |
+| Install | `pip install -q -r requirements.txt && python fixtures/generate_mock_data.py && cd web && bun install && cd .. && python scripts/export_snapshot.py` |
+| Preview | `sh ./run_web.sh` on port **8501** (React site + FastAPI; `sh ./run.sh` runs the Streamlit console instead) |
 
 The launcher passes `--server.enableCORS false --server.enableXsrfProtection false` so
 Streamlit's WebSocket accepts the reverse-proxy origin (without these, the page renders but
@@ -610,9 +792,19 @@ in use.
 - **Stack observability resources are deploy-ready, not deployed**: the SNS topic, spend
   budget and DynamoDB alarms are in the template and validated; the redeploy needs an admin
   session because the scoped app user (correctly) has no CloudFormation permissions.
-- **WhatsApp dispatch is live-seamed, mode-labelled**: with Twilio keys it really sends;
-  without them the Comms Agent records an audited simulation in DynamoDB. The modal states
-  the mode explicitly — a simulated send can never pass as delivered.
+- **Dispatch is live-seamed and mode-labelled**: the Comms Agent walks a provider ladder —
+  Meta's WhatsApp Cloud API (``WHATSAPP_*`` keys, free tier) → email (SendGrid via
+  ``SENDGRID_API_KEY`` + ``RECOVERY_EMAIL_FROM``, or any SMTP server via
+  ``RECOVERY_SMTP_*``) → Twilio WhatsApp (``TWILIO_*`` keys) → clearly-labelled audited
+  simulation. Indian recipients only accept *template* business-initiated WhatsApp: with
+  ``WHATSAPP_TEMPLATE_NAME`` set the rendered Rule 88D notice rides in the Meta template's
+  body variable (creating that template is free in the Meta developer dashboard); Twilio
+  additionally needs ``TWILIO_CONTENT_SID``, and Content API writes are Trial-blocked
+  (error 20003), so the Twilio path is only usable with an upgraded account. The email
+  channel is the zero-cost live path on a Twilio Trial (Trial SMS is also template-locked
+  for India); the register carries ``vendor_email`` per vendor and an email-mode dispatch
+  without a valid address fails closed and is audited. The modal states the active mode —
+  a simulated send can never pass as delivered.
 - **Static 24% p.a.** exposure figure in the dialog (worst-case Sec 50(3)); a date-aware
   interest calculator is straightforward to add.
 - **Period handled is single-`fp`** (`082026`); multi-period sweeps (the 18.4% late-filing
