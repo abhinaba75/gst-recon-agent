@@ -61,6 +61,115 @@ STAMP_STYLE: Final = {
 }
 
 
+# ──────────────────────────────────────────────────────────────────────────
+#  Language layer — English + हिंदी, dual-labelled rather than translated away
+#
+#  Most MSME owners and their accountants in small towns read Hindi first and
+#  English second. So the UI never hides either: headings show the active
+#  language large with the other language beneath it, and the sidebar toggle
+#  flips which one leads. Add a language by adding a third element to each
+#  tuple (the structure is language-count agnostic).
+# ──────────────────────────────────────────────────────────────────────────
+I18N: Final[dict[str, tuple[str, str]]] = {
+    "hero_sub": (
+        "Autonomous GST credit reconciliation for Indian small businesses",
+        "भारतीय छोटे कारोबारों के लिए स्वचालित GST क्रेडिट मिलान",
+    ),
+    "hero_intro": (
+        "Every year ₹45,000 crore of GST credit that businesses have already "
+        "paid goes unclaimed — because a spreadsheet cannot see past a small "
+        "difference in an invoice number. We match your purchase bills against "
+        "the government's GSTR-2B list, recover the credit Excel missed, and "
+        "message the vendors who have not filed.",
+        "हर साल ₹45,000 करोड़ का GST क्रेडिट नहीं मिल पाता, जिसे कारोबार पहले ही "
+        "चुका चुके होते हैं — क्योंकि Excel बिल नंबर की छोटी सी असमानता नहीं पकड़ "
+        "पाता। हम आपके खरीद बिलों को सरकार की GSTR-2B सूची से मिलाते हैं, Excel से "
+        "छूटा क्रेडिट वापस लाते हैं, और जिन विक्रेताओं ने बिल जमा नहीं किया उन्हें "
+        "संदेश भेजते हैं।",
+    ),
+    "kpi_help": (
+        "In plain words: the first figure is all the GST credit sitting in your "
+        "bills. The second already matches the government's records. The third is "
+        "credit we recovered that Excel could not. The fourth is money stuck with "
+        "vendors who have not filed — chase it before the notice arrives.",
+        "आसान शब्दों में: पहला आँकड़ा आपके बिलों में मौजूद कुल GST क्रेडिट है। दूसरा "
+        "सरकारी रिकॉर्ड से मिल चुका है। तीसरा वह क्रेडिट है जो हमने बचाया और Excel नहीं "
+        "पकड़ पाया। चौथा वह पैसा है जो बिल जमा न करने वाले विक्रेताओं के पास फँसा है — "
+        "नोटिस आने से पहले वसूली करें।",
+    ),
+    "sec_spreadsheet": ("The spreadsheet, faithfully reproduced",
+                        "Excel शीट, जैसी है वैसी"),
+    "sec_reconciled": ("The same rows, reconciled", "वही पंक्तियाँ, अब मिलान हो गईं"),
+    "sec_recovery": ("Supplier recovery", "विक्रेता से वसूली"),
+    "sec_ledger": ("Reconciliation ledger", "मिलान बहीखाता"),
+    "sec_log": ("Agent activity log", "एजेंट गतिविधि लॉग"),
+    "sec_history": ("Period history (DynamoDB audit trail)",
+                    "पिछले रन (DynamoDB ऑडिट लॉग)"),
+    "glossary_title": ("What the labels mean", "लेबल का मतलब क्या है"),
+    "g_exact": (
+        "MATCHED · DETERMINISTIC — the bill and the government record agree "
+        "exactly. The credit is safe to claim.",
+        "बिल और सरकारी रिकॉर्ड बिल्कुल एक जैसे हैं। क्रेडिट सुरक्षित है, क्लेम कर "
+        "सकते हैं।",
+    ),
+    "g_ai": (
+        "MATCHED · AI — the invoice number or vendor name differed slightly, but "
+        "the tax and GSTIN agreed, so the agent identified the same bill. Credit "
+        "recovered.",
+        "बिल नंबर या विक्रेता का नाम थोड़ा अलग था, लेकिन टैक्स और GSTIN एक जैसे थे — "
+        "एजेंट ने वही बिल पहचाना। क्रेडिट बच गया।",
+    ),
+    "g_missing": (
+        "DEFAULTING SUPPLIER — the bill is in your books but the vendor has not "
+        "filed GSTR-1, so the credit is not allowed yet under Section 16(2)(aa).",
+        "बिल आपकी बही में है, पर विक्रेता ने GSTR-1 जमा नहीं किया — धारा 16(2)(aa) के "
+        "तहत क्रेडिट अभी नहीं मिल सकता।",
+    ),
+    "g_portal_only": (
+        "PORTAL-ONLY · LATE FILING — the vendor filed late and the credit has now "
+        "appeared in GSTR-2B. Claim it this period.",
+        "विक्रेता ने देर से फाइल किया और क्रेडिट अब GSTR-2B में दिख रहा है। इसी अवधि "
+        "में क्लेम करें।",
+    ),
+    "btn_dispatch": ("Dispatch Recovery Notice via A2A Agent",
+                      "विक्रेता को रिकवरी नोटिस भेजें"),
+    "btn_confirm": ("Confirm dispatch", "भेजने की पुष्टि करें"),
+    "btn_cancel": ("Cancel", "रद्द करें"),
+    "btn_reconcile": ("Reconcile uploaded files", "अपलोड की फाइलों का मिलान करें"),
+    "btn_reset": ("Reset to demo fixtures", "डेमो डेटा पर लौटें"),
+    "lang_label": ("Language", "भाषा"),
+}
+
+
+def lang() -> str:
+    """Active UI language ('en' | 'hi'); English by default.
+
+    Reads the sidebar widget's own state key, so a language change is
+    reflected in the header on the very rerun the toggle triggers.
+    """
+    return "hi" if st.session_state.get("lang_choice") == "हिंदी" else "en"
+
+
+def t(key: str) -> str:
+    """String for the active language."""
+    return I18N[key][1] if lang() == "hi" else I18N[key][0]
+
+
+def alt_of(key: str) -> str:
+    """The *other* language's string — for dual-labelled body copy."""
+    return I18N[key][0] if lang() == "hi" else I18N[key][1]
+
+
+def heading(level: int, key: str) -> None:
+    """Bilingual section heading: active language leads, the other follows small."""
+    other = "en" if lang() == "hi" else "hi"
+    st.markdown(
+        f"{'#' * level} {t(key)}\n"
+        f"<span class='recon-alt' lang='{other}'>{alt_of(key)}</span>",
+        unsafe_allow_html=True,
+    )
+
+
 def stamp(status: str, ai_conf: float = 0.0) -> str:
     """A rubber-stamp chip: double-ring border, letterspaced caps, mono face."""
     bg, fg = STAMP_STYLE[status]
@@ -616,7 +725,7 @@ def render_side_by_side(excel: list[Match], ai: list[Match]) -> None:
     left, right = st.columns(2, gap="large")
 
     with left:
-        st.markdown("### The spreadsheet, faithfully reproduced")
+        heading(3, "sec_spreadsheet")
         st.code('=VLOOKUP(A2, \'GSTR-2B\'!A:F, 2, FALSE)', language="excel")
         fails = [m for m in excel if m.status == "unmatched"]
         st.metric("Written off as lost", inr(sum(m.tax for m in fails)),
@@ -628,7 +737,7 @@ def render_side_by_side(excel: list[Match], ai: list[Match]) -> None:
                     unsafe_allow_html=True)
 
     with right:
-        st.markdown("### The same rows, reconciled")
+        heading(3, "sec_reconciled")
         rescued = [m for m in ai if m.status == "ai"]
         log_run(f"[AGENT] Semantic pass recovered {len(rescued)} invoices "
                 f"({inr(sum(m.tax for m in rescued))})")
@@ -642,7 +751,7 @@ def render_side_by_side(excel: list[Match], ai: list[Match]) -> None:
 
 
 def render_recovery_panel(matches: list[Match], period: str) -> None:
-    st.markdown("### Supplier recovery")
+    heading(3, "sec_recovery")
     st.caption(f"Defaulting vendors, handed to the A2A comms agent — {RULE_88D}, {SEC_50_3}")
     missing = [m for m in matches if m.status == "missing"]
     if not missing:
@@ -662,13 +771,14 @@ def render_recovery_panel(matches: list[Match], period: str) -> None:
         c1.markdown(
             f"<code>{stamp('missing')}</code> &nbsp;{html.escape(m.supplier_name)} — "
             f"{html.escape(m.register_no)} — {inr(m.tax)}", unsafe_allow_html=True)
-        if c2.button("Dispatch WhatsApp Recovery Notice via A2A Agent",
-                     key=f"wa-{m.register_no}",
-                     disabled=not phone,
-                     help="Disabled: no vendor phone in register" if not phone else None):
-            log(f"[A2A] Delegated to Comms Agent → {m.supplier_name} ({phone})")
-            st.session_state["wa_modal"] = m
-            st.rerun()
+    if c2.button(t("btn_dispatch"),
+                 key=f"wa-{m.register_no}",
+                 disabled=not phone and not vendor_email(m),
+                 help=("Disabled: no vendor phone or email in register"
+                       if not phone and not vendor_email(m) else None)):
+        log(f"[A2A] Delegated to Comms Agent → {m.supplier_name} ({phone})")
+        st.session_state["wa_modal"] = m
+        st.rerun()
 
 
 def wa_number(m: Match) -> str | None:
@@ -679,42 +789,67 @@ def wa_number(m: Match) -> str | None:
     return str(row.iloc[0]) if not row.empty else None
 
 
+def vendor_email(m: Match) -> str | None:
+    """Vendor email from the register, tolerating older fixtures without the column."""
+    books = st.session_state.get("books")
+    if books is None or "vendor_email" not in getattr(books, "columns", []):
+        return None
+    row = books.loc[books["invoice_no"] == m.register_no, "vendor_email"]
+    return str(row.iloc[0]) if not row.empty else None
+
+
 def _close_wa_modal() -> None:
     st.session_state.pop("wa_modal", None)
     st.rerun()
 
 
-@st.dialog("A2A Comms Agent · WhatsApp Recovery Notice")
+@st.dialog("A2A Comms Agent · Recovery Notice")
 def render_wa_modal(matches: list[Match], period: str) -> None:
     m = st.session_state.get("wa_modal")
     if not m:
         return
     from backend.subagents import comms_agent
 
-    live = comms_agent.mode() == "twilio"
-    st.markdown(f"**To** {m.supplier_name}, `{wa_number(m)}`")
+    live_mode = comms_agent.mode() in ("twilio", "meta", "email")
+    _MODE_LABEL = {
+        "meta": "Meta WhatsApp Cloud API (live, free tier)",
+        "email": ("email delivery — SendGrid" if os.environ.get("SENDGRID_API_KEY")
+                  else f"email delivery — SMTP ({os.environ.get('RECOVERY_SMTP_HOST')})"),
+        "twilio": "Twilio WhatsApp API (live)",
+        "simulated": "simulated — no provider keys configured; the attempt is "
+                     "still recorded in the DynamoDB audit trail.",
+    }
+    channel = comms_agent.mode()
+    recipient = vendor_email(m) if channel == "email" else wa_number(m)
+    st.markdown(f"**To** {m.supplier_name}, `{recipient}`")
     st.markdown(f"**Period** {period}")
     st.text_area("Message preview", wa_preview(m, period), height=140, key="wa-preview")
     st.caption(
         f"Template governed by Rule 88D, 30-day remedy window. "
         f"DRC-01C exposure {inr(m.tax * 0.24)} (interest @24% p.a.)"
     )
-    st.caption(
-        "Send mode: **Twilio WhatsApp API (live)**" if live else
-        "Send mode: **simulated** — Twilio keys not configured; the attempt is "
-        "still recorded in the DynamoDB audit trail."
-    )
+    st.caption(f"Send mode: **{_MODE_LABEL.get(channel, channel)}**"
+               + ("" if live_mode or channel == "simulated"
+                  else " — configure a provider to go live."))
     c1, c2 = st.columns(2)
-    if c1.button("Confirm dispatch", type="primary", width="stretch"):
+    if c1.button(t("btn_confirm"), type="primary", width="stretch"):
         result = comms_agent.send_recovery_notice(
             period=period, invoice_no=m.register_no, supplier=m.supplier_name,
-            phone=wa_number(m), message=wa_preview(m, period),
+            phone=wa_number(m), email=vendor_email(m), message=wa_preview(m, period),
         )
         if result["ok"]:
             if result["mode"] == "twilio":
                 log(f"[A2A] WhatsApp delivered to {m.supplier_name} "
                     f"({wa_number(m)}) · sid {result['message_id']}")
                 st.toast("Recovery notice delivered via Twilio WhatsApp API")
+            elif result["mode"] == "meta":
+                log(f"[A2A] WhatsApp delivered to {m.supplier_name} "
+                    f"({wa_number(m)}) · id {result['message_id']}")
+                st.toast("Recovery notice delivered via Meta WhatsApp Cloud API")
+            elif result["mode"] == "email":
+                log(f"[A2A] Recovery email delivered to {m.supplier_name} "
+                    f"({vendor_email(m)}) · id {result['message_id'] or 'n/a'}")
+                st.toast("Recovery notice delivered by email")
             else:
                 log(f"[A2A] WhatsApp notice dispatched to {m.supplier_name} "
                     f"({wa_number(m)}) · simulated, recorded in audit trail")
@@ -723,7 +858,7 @@ def render_wa_modal(matches: list[Match], period: str) -> None:
             log(f"[A2A] Dispatch failed for {m.register_no}: {result['detail']}")
             st.error(f"Dispatch failed: {result['detail']}")
         _close_wa_modal()
-    if c2.button("Cancel", width="stretch"):
+    if c2.button(t("btn_cancel"), width="stretch"):
         _close_wa_modal()
 
 
@@ -742,7 +877,7 @@ def render_history_panel() -> None:
         runs = []
     if not runs:
         return
-    with st.expander("Period history (DynamoDB audit trail)", expanded=False):
+    with st.expander(t("sec_history"), expanded=False):
         rows = []
         for r in runs:
             engines = " · ".join(f"{e} ×{n}" for e, n in r.get("engines", {}).items()) or "deterministic-only"
@@ -763,8 +898,33 @@ def render_history_panel() -> None:
                    "degraded (Bedrock-outage) runs are flagged, never hidden.")
 
 
+def render_glossary() -> None:
+    """Plain-language key, so a label is never the only explanation.
+
+    Written for a shop owner or their accountant reading on a phone: short
+    sentences, both languages, no jargon left unglossed.
+    """
+    other_lang = "en" if lang() == "hi" else "hi"
+    entries = "".join(
+        f"<dt><code>{badge}</code> — {t(detail)}</dt>"
+        for badge, detail in (
+            ("MATCHED · DETERMINISTIC", "g_exact"),
+            ("MATCHED · AI %", "g_ai"),
+            ("DEFAULTING SUPPLIER", "g_missing"),
+            ("PORTAL-ONLY · LATE FILING", "g_portal_only"),
+        )
+    )
+    with st.expander(t("glossary_title"), expanded=False):
+        st.markdown(
+            f"<dl class='recon-gloss'>{entries}</dl>"
+            f"<span class='recon-alt' lang='{other_lang}'"
+            f" translate='no'>{alt_of('glossary_title')}</span>",
+            unsafe_allow_html=True,
+        )
+
+
 def render_agent_log() -> None:
-    with st.expander("Agent activity log", expanded=False):
+    with st.expander(t("sec_log"), expanded=False):
         # One-time events + this rerun's narration, merged by timestamp.
         merged = sorted(st.session_state.get("log", [])
                         + st.session_state.get("run_log", []))
@@ -796,6 +956,12 @@ def render_dashboard(books: pd.DataFrame, portal: list[PortalRow]) -> None:
     c4.metric("ITC at High Risk", inr(risk),
               delta="Rule 88D exposure", delta_color="inverse")
 
+    # Plain-language key: a number without its meaning is not usable by the
+    # person who owns the money. Bilingual, and never hidden behind a hover.
+    st.markdown(f"<div class='recon-note'>{t('kpi_help')}</div>",
+                unsafe_allow_html=True)
+    render_glossary()
+
     # Cost ledger — the economics of the cascade, per run, from real usage.
     costs = _engine_costs()
     ai_rows = [m for m in matches if m.status == "ai" and m.engine]
@@ -825,7 +991,7 @@ def render_dashboard(books: pd.DataFrame, portal: list[PortalRow]) -> None:
 
 
 def render_full_ledger(matches: list[Match]) -> None:
-    st.markdown("### Reconciliation ledger")
+    heading(3, "sec_ledger")
     st.caption("Every classification, with the evidence the agent used.")
     rows = [
         {
@@ -846,15 +1012,21 @@ def render_full_ledger(matches: list[Match]) -> None:
 def sidebar() -> None:
     with st.sidebar:
         st.markdown("### Recon-Agent")
-        st.caption("Autonomous GST ITC Reconciliation")
+        st.caption("Autonomous GST ITC Reconciliation / स्वचालित GST क्रेडिट मिलान")
         st.markdown(
             "<small>Operates under Section 16(2)(aa) and Rule 88D of the CGST Act</small>",
             unsafe_allow_html=True)
         st.divider()
+        # Language sits first: it decides how everything below reads, and it is
+        # the setting a Hindi-first user looks for before anything else.
+        st.radio("भाषा / Language", ["English", "हिंदी"],
+                 index=1 if lang() == "hi" else 0, horizontal=True,
+                 key="lang_choice")
+        st.divider()
         st.markdown("#### Data Source")
         books_up = st.file_uploader("Purchase Register (.xlsx)", type=["xlsx"])
         json_up = st.file_uploader("GSTR-2B (.json)", type=["json"])
-        if books_up and json_up and st.button("Reconcile uploaded files", type="primary"):
+        if books_up and json_up and st.button(t("btn_reconcile"), type="primary"):
             books = pd.read_excel(books_up)
             raw_2b = json_up.read()
             payload = json.loads(raw_2b.decode("utf-8"))
@@ -873,7 +1045,7 @@ def sidebar() -> None:
                     log("[S3] Archive unavailable — documents not stored")
             except Exception as exc:  # noqa: BLE001 — archiving must not block
                 log(f"[S3] Archive error ({type(exc).__name__}) — documents not stored")
-        if st.button("Reset to demo fixtures"):
+        if st.button(t("btn_reset")):
             st.session_state.pop("uploads", None)
             st.rerun()
         st.divider()
@@ -913,6 +1085,112 @@ def sidebar() -> None:
         st.caption("AWS First Commit Hackathon, WeMakeDevs")
 
 
+# The design system, in one place. shadcn-style token layer (muted surfaces,
+# hairline borders, soft rings, one radius) rebuilt as CSS because this is a
+# Streamlit app — no component library can be installed here. Sizing is tuned
+# for the audience first: larger base type, 48px touch targets, AA+ contrast,
+# and a reduced-motion escape hatch.
+_CSS: Final = """<style>
+:root {
+  --recon-bg: #101725;
+  --recon-card: #1B2537;
+  --recon-border: rgba(255, 255, 255, 0.09);
+  --recon-border-strong: rgba(255, 255, 255, 0.16);
+  --recon-text: #F1EEE6;
+  --recon-muted: #AAB3C7;
+  --recon-brass: #D8B94E;
+  --recon-radius: 14px;
+  --recon-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  color-scheme: dark;
+}
+html { font-size: 17px; }
+body, .stApp { background: var(--recon-bg); color: var(--recon-text); }
+section[data-testid="stSidebar"] { background: #0D1420;
+  border-right: 1px solid var(--recon-border); }
+[data-testid="stHeader"] { background: transparent; }
+
+.recon-skip { position: absolute; left: -9999px; top: 0; z-index: 9999;
+  background: var(--recon-brass); color: #1A1405; font-weight: 600;
+  padding: 10px 16px; border-radius: 0 0 12px 0; }
+.recon-skip:focus { left: 0; }
+
+.recon-hero { position: relative; padding-top: 4px; }
+.recon-hero::before { content: ""; position: absolute; inset: -52px -24px auto -24px;
+  height: 250px; pointer-events: none;
+  background: radial-gradient(58% 100% at 18% 0%, rgba(216,185,78,0.11), transparent 72%),
+              radial-gradient(52% 100% at 82% 8%, rgba(69,196,134,0.09), transparent 72%); }
+.recon-eyebrow { display: inline-flex; align-items: center; gap: 8px;
+  font-size: 0.76rem; letter-spacing: 0.06em; color: var(--recon-brass);
+  background: rgba(216,185,78,0.10); border: 1px solid rgba(216,185,78,0.30);
+  border-radius: 999px; padding: 6px 13px; }
+.recon-alt { display: block; color: var(--recon-muted); font-size: 0.95rem;
+  font-weight: 400; margin-top: 2px; }
+.recon-note { border-left: 3px solid rgba(216,185,78,0.65);
+  background: rgba(255,255,255,0.035); border-radius: 0 12px 12px 0;
+  padding: 13px 16px; color: var(--recon-muted); margin: 10px 0 2px; }
+.recon-note strong { color: var(--recon-text); }
+.recon-gloss { margin: 4px 0 10px; }
+.recon-gloss dt { color: var(--recon-text); font-weight: 600; margin-top: 10px; }
+.recon-gloss dd { color: var(--recon-muted); margin: 2px 0 0; }
+
+div[data-testid="stMetric"] {
+  background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.012)),
+              var(--recon-card);
+  border: 1px solid var(--recon-border); border-radius: var(--recon-radius);
+  padding: 16px 18px 17px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 1px 2px rgba(0,0,0,0.30);
+  transition: transform 320ms var(--recon-ease), border-color 320ms var(--recon-ease),
+              box-shadow 320ms var(--recon-ease); }
+div[data-testid="stMetric"]:hover { transform: translateY(-2px);
+  border-color: rgba(216,185,78,0.34);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 6px 18px rgba(0,0,0,0.35); }
+[data-testid="stMetricLabel"], [data-testid="stMetricLabel"] p {
+  font-size: 0.98rem; color: var(--recon-muted); }
+[data-testid="stMetricValue"] { font-size: 1.85rem;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+[data-testid="stMetricDelta"] { font-size: 0.88rem; }
+
+.stButton > button, .stDownloadButton > button {
+  min-height: 48px; border-radius: 12px; font-weight: 600; font-size: 1rem;
+  touch-action: manipulation; -webkit-tap-highlight-color: rgba(216,185,78,0.18);
+  transition: transform 220ms var(--recon-ease), background-color 220ms var(--recon-ease),
+              border-color 220ms var(--recon-ease), box-shadow 220ms var(--recon-ease); }
+.stButton > button:hover { transform: translateY(-1px); }
+.stButton > button[kind="primary"] {
+  background: linear-gradient(180deg, #E3C661, #C9A227); color: #1A1405;
+  border: 1px solid rgba(255,255,255,0.20); }
+.stButton > button[kind="secondary"] {
+  background: rgba(255,255,255,0.04); border: 1px solid var(--recon-border-strong); }
+
+:where(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: none; box-shadow: 0 0 0 3px rgba(216,185,78,0.55), 0 0 0 1px var(--recon-bg); }
+input:focus-visible, textarea:focus-visible { border-color: var(--recon-brass) !important; }
+
+[data-testid="stDataFrame"], [data-testid="stExpander"], [data-testid="stFileUploader"],
+[data-testid="stAlert"] { border-radius: var(--recon-radius); }
+[data-testid="stExpander"] { border: 1px solid var(--recon-border);
+  background: rgba(255,255,255,0.02); }
+[data-testid="stDialog"] > div, div[role="dialog"] {
+  border: 1px solid var(--recon-border-strong); border-radius: 18px;
+  overscroll-behavior: contain; }
+code, kbd { font-variant-numeric: tabular-nums; }
+h1, h2, h3, h4 { letter-spacing: 0.005em; text-wrap: balance; line-height: 1.25; }
+p, li { line-height: 1.6; }
+hr { border-color: var(--recon-border) !important; }
+
+@media (max-width: 768px) {
+  html { font-size: 18.5px; }
+  [data-testid="stMetricValue"] { font-size: 1.7rem; }
+  .stButton > button { width: 100%; }
+  .recon-note { padding: 12px 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 1ms !important;
+    animation-duration: 1ms !important; animation-iteration-count: 1 !important; }
+}
+</style>"""
+
+
 def main() -> None:
     st.set_page_config(
         page_title="Recon-Agent — GST ITC Reconciliation",
@@ -920,26 +1198,24 @@ def main() -> None:
         layout="wide",
         initial_sidebar_state="expanded",
     )
+    st.markdown(_CSS, unsafe_allow_html=True)
     st.markdown(
-        """<style>
-        .stApp { background: #131A29; color: #E8E4D8; }
-        section[data-testid="stSidebar"] { background: #0F1524; }
-        div[data-testid="stMetric"] {
-            background: #1B2537; border: 1px solid #2C3750;
-            border-radius: 2px; padding: 14px 16px;
-            font-variant-numeric: tabular-nums;
-        }
-        h1, h2, h3, h4 { letter-spacing: 0.01em; text-wrap: balance; }
-        code { font-variant-numeric: tabular-nums; }
-        </style>""", unsafe_allow_html=True)
-
+        "<a class='recon-skip' href='#recon-main'>Skip to main content / "
+        "मुख्य सामग्री पर जाएँ</a>",
+        unsafe_allow_html=True)
+    st.markdown(
+        "<div class='recon-hero'><span class='recon-eyebrow'>"
+        "🧾 AWS First Commit · WeMakeDevs</span></div>",
+        unsafe_allow_html=True)
     st.title("Recon-Agent")
-    st.markdown("**Autonomous GST ITC reconciliation for Indian MSMEs**")
-    st.caption(
-        "Every year ₹45,000 crore of legitimately earned Input Tax Credit goes "
-        "unclaimed, because a spreadsheet cannot see past a separator. Section "
-        "16(2)(aa) blocks credit unless the supplier files; Recon-Agent finds it, "
-        "rescues it, and chases the vendor.")
+    other_lang = "en" if lang() == "hi" else "hi"
+    st.markdown(
+        f"**{t('hero_sub')}**"
+        f"<span class='recon-alt' lang='{other_lang}'"
+        f" translate='no'>{alt_of('hero_sub')}</span>",
+        unsafe_allow_html=True)
+    st.markdown(f"<div class='recon-note' id='recon-main'>{t('hero_intro')}</div>",
+                unsafe_allow_html=True)
     st.divider()
 
     if st.button("Load demo fixtures", type="primary",
