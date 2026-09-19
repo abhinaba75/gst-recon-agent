@@ -8,6 +8,15 @@ tempkeys.txt
 .env
 .env.*
 !.env.example
+# Web frontend build artifacts (the exported snapshot IS committed — the
+# hosted build has no Python, so it serves the last engine run).
+web/node_modules/
+web/dist/
+
+# Local account store: password hashes, never a credential to share.
+.recon-users.json
+.recon-users.json.tmp
+
 # Never commit credential files or crash dumps.
 recon-key*
 *-key*.json
